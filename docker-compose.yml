@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: smart-mechanic-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-taller_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build: .
+    container_name: smart-mechanic-api
+    restart: always
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-taller_db}
+      - SECRET_KEY=${SECRET_KEY:-super-secret-local-key-for-development}
+      - ROBOFLOW_API_KEY=${ROBOFLOW_API_KEY:-wuOFKaZQdzfzS4EOZNnp}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-AIzaSyABqE-z2_n0JtKN0aui9y9IE5bpPqHJgLs}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=${FIREBASE_SERVICE_ACCOUNT_PATH:-smart-mechanic-4a35e-firebase-adminsdk-fbsvc-b9d0bc3427.json}
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
+    # Ejecutar migraciones antes de iniciar el servidor
+    entrypoint: >
+      sh -c "
+        echo 'Esperando a que la base de datos esté lista...'
+        sleep 5;
+        echo 'Ejecutando migraciones de Alembic...'
+        alembic upgrade head;
+        echo 'Iniciando servidor...'
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
+      "
+
+volumes:
+  postgres_data:
+  uploads_data:
