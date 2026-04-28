@@ -1,25 +1,11 @@
 services:
-  db:
-    image: postgis/postgis:16-3.4
-    container_name: smart-mechanic-db
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-taller_db}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
 
   api:
     build: .
     container_name: smart-mechanic-api
     restart: always
-    depends_on:
-      - db
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-taller_db}
+      - DATABASE_URL=${DATABASE_URL}
       - SECRET_KEY=${SECRET_KEY:-super-secret-local-key-for-development}
       - ROBOFLOW_API_KEY=${ROBOFLOW_API_KEY:-wuOFKaZQdzfzS4EOZNnp}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-AIzaSyABqE-z2_n0JtKN0aui9y9IE5bpPqHJgLs}
@@ -31,14 +17,25 @@ services:
     # Ejecutar migraciones antes de iniciar el servidor
     entrypoint: >
       sh -c "
-        echo 'Esperando a que la base de datos esté lista...'
-        sleep 5;
+        # Extraer el host de la DATABASE_URL para saber si es local
+        DB_HOST=$(echo $DATABASE_URL | sed -e 's|.*@||' -e 's|/.*||' -e 's|:.*||')
+        
+        if [ \"$DB_HOST\" = \"db\" ]; then
+          echo \"Esperando a la base de datos LOCAL ($DB_HOST)...\"
+          until pg_isready -h db -p 5432 -U postgres; do
+            echo 'Base de datos local no disponible todavía, reintentando...'
+            sleep 2
+          done
+        else
+          echo \"Conectando a base de datos REMOTA ($DB_HOST)...\"
+        fi
+        
         echo 'Ejecutando migraciones de Alembic...'
-        alembic upgrade head;
+        alembic upgrade head
         echo 'Iniciando servidor...'
         uvicorn app.main:app --host 0.0.0.0 --port 8000
       "
 
 volumes:
-  postgres_data:
+#  postgres_data:
   uploads_data:
