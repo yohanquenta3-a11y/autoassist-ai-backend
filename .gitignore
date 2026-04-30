@@ -12,19 +12,23 @@ __pycache__/
 *.so
 .Python
 
-# Variables de entorno (¡NUNCA SUBIR CLAVES SECRETAS!)
+# Variables de entorno y Secretos (¡NUNCA SUBIR CLAVES SECRETAS!)
 .env
 .env.local
-.env.*.local
-.env.*.log
-*.pot
-*.pyc
-__pycache__/
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-media
+.env.development.local
+.env.test.local
+.env.production.local
 *.json
+!package.json
+!tsconfig.json
+!composer.json
+!angular.json
+!ngsw-config.json
+
+# Firebase Service Account Keys
+*-firebase-adminsdk-*.json
+service-account.json
+credentials.json
 
 # Bases de Datos locales (SQLite)
 *.sqlite3
