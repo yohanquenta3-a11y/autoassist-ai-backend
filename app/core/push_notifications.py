@@ -38,6 +38,13 @@ class PushNotificationService:
             PushNotificationService.initialize()
 
         try:
+            # Configurar Webpush de forma segura para evitar errores en versiones viejas del SDK
+            webpush_options = None
+            if hasattr(messaging, 'WebpushFcmOptions'):
+                webpush_options = messaging.WebpushFcmOptions(
+                    link=settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "https://smart-mechanic-frontend.vercel.app"
+                )
+
             message = messaging.Message(
                 notification=messaging.Notification(
                     title=title,
@@ -55,9 +62,7 @@ class PushNotificationService:
                         icon="/favicon.ico",
                         badge="/favicon.ico",
                     ),
-                    fcm_options=messaging.WebpushFcmOptions(
-                        link=settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "https://smart-mechanic-frontend.vercel.app"
-                    )
+                    fcm_options=webpush_options
                 ),
                 data=data or {},
                 token=token,

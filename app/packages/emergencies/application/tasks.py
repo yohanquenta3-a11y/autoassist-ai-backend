@@ -73,19 +73,28 @@ async def run_full_incident_pipeline(incident_id: uuid.UUID):
             match_use_case = MatchWorkshopUseCase(assignment_repo, incident_repo)
             assignment = await match_use_case.execute(incident_id)
             
-            if assignment and assignment.taller:
-                workshop = assignment.taller
+            # Recuperar el taller de forma segura usando el repositorio optimizado
+            workshop = None
+            if assignment and assignment.id_taller:
+                from app.packages.workshops.infrastructure.repositories import WorkshopRepository
+                ws_repo = WorkshopRepository(session)
+                workshop = await ws_repo.get_by_id(assignment.id_taller)
+
+            if workshop:
                 logger.info(f"✅ PIPELINE: Asignado al taller {workshop.nombre}")
 
                 # A. Notificar al taller (Push)
-                for admin in workshop.administradores:
-                    if admin.usuario.fcm_token:
-                        asyncio.create_task(push_service.send_push_notification(
-                            token=admin.usuario.fcm_token,
-                            title="¡NUEVA EMERGENCIA!",
-                            body=f"Vehículo {incident.vehiculo.marca} {incident.vehiculo.modelo} necesita ayuda.",
-                            data={"type": "NEW_INCIDENT", "incident_id": str(incident_id)}
-                        ))
+                # El repositorio ya cargó los administradores y sus usuarios gracias al eager loading
+                if workshop.administradores:
+                    for admin in workshop.administradores:
+                        if admin.usuario and admin.usuario.fcm_token:
+                            logger.info(f"📲 PUSH: Notificando a admin del taller: {admin.usuario.nombre}")
+                            asyncio.create_task(push_service.send_push_notification(
+                                token=admin.usuario.fcm_token,
+                                title="¡NUEVA EMERGENCIA!",
+                                body=f"Vehículo {incident.vehiculo.marca} {incident.vehiculo.modelo} necesita ayuda.",
+                                data={"type": "NEW_INCIDENT", "incident_id": str(incident_id)}
+                            ))
                 
                 # B. Notificar al usuario (WebSocket + Push)
                 await manager.notify_user(user_id, {

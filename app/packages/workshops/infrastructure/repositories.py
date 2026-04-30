@@ -7,6 +7,8 @@ import uuid
 from app.packages.workshops.domain.models import Taller, AdministradorTaller
 
 
+from sqlalchemy.orm import selectinload
+
 class WorkshopRepository:
     """Operaciones de BD para la entidad Taller y sus relaciones."""
 
@@ -25,7 +27,12 @@ class WorkshopRepository:
 
     async def get_by_id(self, taller_id: uuid.UUID) -> Optional[Taller]:
         result = await self.session.execute(
-            select(Taller).where(Taller.id_taller == taller_id)
+            select(Taller)
+            .options(
+                selectinload(Taller.administradores)
+                .selectinload(AdministradorTaller.usuario)
+            )
+            .where(Taller.id_taller == taller_id)
         )
         return result.scalars().first()
 

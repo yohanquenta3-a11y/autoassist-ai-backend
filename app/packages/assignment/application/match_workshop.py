@@ -49,6 +49,7 @@ class MatchWorkshopUseCase:
         new_assignment = AsignacionIncidente(
             id_incidente=id_incidente,
             id_taller=best_taller.id_taller,
+            taller=best_taller, # Asignamos el objeto para que esté disponible de inmediato
             id_tecnico=None,
             estado_asignacion="PENDIENTE_ACEPTACION",
             distancia_km=distance_meters / 1000.0

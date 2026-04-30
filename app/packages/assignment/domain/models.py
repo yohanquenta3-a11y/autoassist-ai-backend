@@ -19,3 +19,7 @@ class AsignacionIncidente(Base):
     score_asignacion = Column(Numeric(5, 2), nullable=True)  # Puntuación del algoritmo
     distancia_km = Column(Numeric(8, 2), nullable=True)       # Distancia calculada en km
     fecha_asignacion = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relaciones
+    incidente = relationship("app.packages.emergencies.domain.models.Incidente")
+    taller = relationship("app.packages.workshops.domain.models.Taller")
