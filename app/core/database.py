@@ -9,6 +9,8 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=True,
     future=True,
+    pool_recycle=3600,
+    pool_pre_ping=True,
 )
 
 # Fábrica de sesiones asíncronas

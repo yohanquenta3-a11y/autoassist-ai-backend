@@ -26,10 +26,15 @@ class AssignmentRepository:
         # Distancia en metros para ST_DWithin
         radius_meters = radius_km * 1000
         
+        from sqlalchemy.orm import joinedload
+        from app.packages.workshops.domain.models import AdministradorTaller
+        
         # Consulta base
         query = select(
             Taller, 
             ST_Distance(Taller.ubicacion, point).label("distance")
+        ).options(
+            joinedload(Taller.administradores).joinedload(AdministradorTaller.usuario)
         ).where(
             and_(
                 Taller.is_active == True,
@@ -47,7 +52,8 @@ class AssignmentRepository:
         query = query.order_by("distance").limit(limit)
         
         result = await self.session.execute(query)
-        return result.all()
+        # Usamos unique() porque joinedload con columnas adicionales puede generar filas "duplicadas" en el result set
+        return result.unique().all()
 
     async def create_assignment(self, assignment: AsignacionIncidente) -> AsignacionIncidente:
         self.session.add(assignment)

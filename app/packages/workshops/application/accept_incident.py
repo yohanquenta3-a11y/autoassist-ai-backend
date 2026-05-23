@@ -62,23 +62,41 @@ class AcceptIncidentUseCase:
 
         await self.incident_repo.session.commit()
         
-        # 6. Notificar al Cliente en Tiempo Real
+        # 6. Notificar al Cliente (WebSocket + Push)
         try:
             from app.core.notifications import manager
-            if incident.vehiculo:
+            from app.core.push_notifications import push_service
+            
+            if incident.vehiculo and incident.vehiculo.propietario:
+                user_id = str(incident.vehiculo.id_usuario)
+                fcm_token = incident.vehiculo.propietario.fcm_token
+                
+                msg_text = f"Ayuda en camino. El técnico {tecnico.nombre} ha sido asignado."
+                
+                # A. WebSocket (App abierta)
                 await manager.notify_user(
-                    str(incident.vehiculo.id_usuario),
+                    user_id,
                     {
                         "type": "INCIDENT_ACCEPTED",
                         "id": str(incident_id),
-                        "message": f"Ayuda en camino. El técnico {tecnico.nombre} ha sido asignado.",
+                        "message": msg_text,
                         "tecnico": {
                             "nombre": tecnico.nombre,
                             "telefono": tecnico.telefono
                         }
                     }
                 )
+                
+                # B. Push Notification (App cerrada/fondo)
+                if fcm_token:
+                    import asyncio
+                    asyncio.create_task(push_service.send_push_notification(
+                        token=fcm_token,
+                        title="¡Ayuda en camino!",
+                        body=msg_text,
+                        data={"incident_id": str(incident_id), "type": "INCIDENT_ACCEPTED"}
+                    ))
         except Exception as e:
-            logger.error(f"Error al notificar aceptación por WebSocket: {str(e)}")
+            logger.error(f"Error al notificar aceptación: {str(e)}")
 
         return incident

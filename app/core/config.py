@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # IA - Google Gemini
     GEMINI_API_KEY: str = ""
     
+    # Firebase Cloud Messaging
+    FIREBASE_SERVICE_ACCOUNT_PATH: str = ""
+    
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
     

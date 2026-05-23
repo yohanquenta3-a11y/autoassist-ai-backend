@@ -58,6 +58,7 @@ class AdministradorTaller(Base):
     id_taller = Column(UUID(as_uuid=True), ForeignKey("taller.id_taller"), nullable=False)
 
     taller = relationship("Taller", back_populates="administradores")
+    usuario = relationship("app.packages.identity.domain.models.Usuario")
 
 
 class Tecnico(Base):

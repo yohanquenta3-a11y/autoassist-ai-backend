@@ -5,7 +5,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from app.core.database import get_db
 from app.packages.identity.infrastructure.repositories import UserRepository
 from app.packages.identity.presentation.schemas.auth_schemas import UserCreate, UserResponse, TokenSchema, UserLogin
-from app.packages.identity.domain.models import ROL_CLIENTE
+from app.packages.identity.domain.models import ROL_CLIENTE, Usuario
+from app.core.dependencies import get_current_active_user
 
 from app.packages.identity.application.auth_use_cases.register_user import RegisterUserUseCase
 from app.packages.identity.application.auth_use_cases.login_user import LoginUserUseCase
@@ -50,3 +51,22 @@ async def login_oauth_flow(
     use_case = LoginUserUseCase(repo)
     ip = request.client.host if request.client else "unknown"
     return await use_case.execute(user_cred, ip=ip)
+
+@auth_router.post("/fcm-token", status_code=status.HTTP_200_OK)
+async def update_fcm_token(
+    fcm_in: dict, # Simplificado: {"fcm_token": "..."}
+    current_user: Usuario = Depends(get_current_active_user),
+    repo: UserRepository = Depends(get_user_repository)
+):
+    """(CU_PUSH) Actualizar el token FCM del usuario para notificaciones push"""
+    token = fcm_in.get("fcm_token")
+    import logging
+    logging.getLogger("app").info(f"📲 PUSH: Recibido token FCM para usuario {current_user.id_usuario}: {token[:15]}...")
+    if token is None:
+        raise HTTPException(status_code=400, detail="fcm_token es requerido")
+        
+    success = await repo.update_fcm_token(current_user.id_usuario, token)
+    if not success:
+        raise HTTPException(status_code=500, detail="Error al actualizar el token")
+    
+    return {"message": "FCM Token actualizado correctamente"}

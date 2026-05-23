@@ -4,6 +4,10 @@ from app.api import api_router
 from app.core.config import settings
 from app.core.exceptions import setup_exception_handlers
 from app.core.middleware import AuditMiddleware
+from app.core.push_notifications import PushNotificationService
+
+# Inicializar Firebase Admin SDK
+PushNotificationService.initialize()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

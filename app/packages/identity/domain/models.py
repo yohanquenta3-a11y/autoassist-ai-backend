@@ -36,6 +36,7 @@ class Usuario(Base):
     correo = Column(String(150), unique=True, index=True, nullable=False)
     contrasena = Column(String(255), nullable=False)
     estado = Column(Boolean, default=True, nullable=False)
+    fcm_token = Column(String(255), nullable=True)
     fecha_creacion = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     rol_obj = relationship("Rol", back_populates="usuarios", lazy="selectin")

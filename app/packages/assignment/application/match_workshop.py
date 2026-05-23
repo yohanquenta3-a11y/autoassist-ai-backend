@@ -75,27 +75,55 @@ class MatchWorkshopUseCase:
         await self.assignment_repo.create_assignment(new_assignment)
         await self.incident_repo.session.commit()
         
-        # 4. Notificación Real-time (WebSocket)
+        # 4. Notificación Real-time (WebSocket + Push)
         try:
             from app.core.notifications import manager
-            # Al Taller
+            from app.core.push_notifications import push_service
+            
+            # A. Notificar al Taller (Dashboard Web + Mobile Push para Admins)
             await manager.notify_workshop(
                 str(best_taller.id_taller), 
                 {"type": "NEW_ASSIGNMENT", "id": str(id_incidente)}
             )
-            # Al Cliente (Dueño del vehículo)
-            if incidente.vehiculo:
+            
+            for admin in best_taller.administradores:
+                if admin.usuario and admin.usuario.fcm_token:
+                    import asyncio
+                    asyncio.create_task(push_service.send_push_notification(
+                        token=admin.usuario.fcm_token,
+                        title="¡Nuevo Incidente Asignado!",
+                        body=f"Un nuevo incidente requiere tu atención: {incidente.resumen_ia or 'Sin descripción'}",
+                        data={"type": "NEW_ASSIGNMENT", "incident_id": str(id_incidente)}
+                    ))
+
+            # B. Notificar al Cliente (Dueño del vehículo)
+            if incidente.vehiculo and incidente.vehiculo.propietario:
+                user_id = str(incidente.vehiculo.id_usuario)
+                fcm_token = incidente.vehiculo.propietario.fcm_token
+                
+                # WebSocket
                 await manager.notify_user(
-                    str(incidente.vehiculo.id_usuario),
+                    user_id,
                     {
                         "type": "WORKSHOP_ASSIGNED", 
                         "id": str(id_incidente),
                         "workshop_name": best_taller.nombre
                     }
                 )
-            # Al SuperAdmin
+                
+                # Push
+                if fcm_token:
+                    import asyncio
+                    asyncio.create_task(push_service.send_push_notification(
+                        token=fcm_token,
+                        title="Taller Asignado",
+                        body=f"Tu solicitud ha sido enviada a {best_taller.nombre}. Esperando respuesta.",
+                        data={"type": "WORKSHOP_ASSIGNED", "incident_id": str(id_incidente)}
+                    ))
+
+            # C. Al SuperAdmin (WebSocket)
             await manager.notify_admins({"type": "NEW_ASSIGNMENT", "id": str(id_incidente)})
         except Exception as e:
-            logger.error(f"Error al notificar por WebSocket: {str(e)}")
+            logger.error(f"Error al notificar asignación: {str(e)}")
 
         return new_assignment

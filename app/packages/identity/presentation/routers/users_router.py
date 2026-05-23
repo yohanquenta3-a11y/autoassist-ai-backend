@@ -6,10 +6,11 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_active_user
 from app.packages.identity.domain.models import Usuario, ROL_SUPERADMIN, ROL_ADMIN_TALLER
 from app.packages.identity.infrastructure.repositories import UserRepository
-from app.packages.identity.presentation.schemas.auth_schemas import UserResponse
+from app.packages.identity.presentation.schemas.auth_schemas import UserResponse, UserAdminCreate
 from app.packages.identity.presentation.schemas.user_schemas import UserProfileUpdate, VehicleCreate, VehicleResponse
 from app.packages.identity.application.user_use_cases.update_profile import UpdateProfileUseCase
 from app.packages.identity.application.user_use_cases.register_vehicle import RegisterVehicleUseCase
+from app.packages.identity.application.user_use_cases.create_user_admin import CreateUserAdminUseCase
 from app.packages.workshops.infrastructure.repositories import WorkshopRepository
 from app.core.exceptions import ForbiddenError, NotFoundError
 import uuid
@@ -19,6 +20,39 @@ users_router = APIRouter(tags=["Gestión de Usuarios y Perfiles"])
 
 def get_user_repository(session: AsyncSession = Depends(get_db)):
     return UserRepository(session)
+
+def get_workshop_repository(session: AsyncSession = Depends(get_db)):
+    return WorkshopRepository(session)
+
+@users_router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user_admin(
+    user_in: UserAdminCreate,
+    current_user: Usuario = Depends(get_current_active_user),
+    user_repo: UserRepository = Depends(get_user_repository),
+    workshop_repo: WorkshopRepository = Depends(get_workshop_repository)
+):
+    """
+    (Admin) Crear un nuevo usuario manualmente.
+    - SuperAdmin: Puede crear cualquier rol en cualquier taller.
+    - AdminTaller: Solo puede crear Técnicos para SU taller.
+    """
+    if current_user.rol_nombre not in [ROL_SUPERADMIN, ROL_ADMIN_TALLER]:
+        raise ForbiddenError("No tienes permisos para crear usuarios.")
+
+    # Restricción Multi-tenant para Admin de Taller
+    if current_user.rol_nombre == ROL_ADMIN_TALLER:
+        if user_in.rol_nombre != "tecnico":
+            raise ForbiddenError("Como Administrador de Taller, solo puedes crear técnicos.")
+        
+        taller = await workshop_repo.get_by_admin(current_user.id_usuario)
+        if not taller:
+            raise ForbiddenError("No tienes un taller vinculado.")
+        
+        # Forzar que el técnico sea de su taller
+        user_in.id_taller = taller.id_taller
+
+    use_case = CreateUserAdminUseCase(user_repo, workshop_repo)
+    return await use_case.execute(user_in)
 
 @users_router.get("", response_model=List[UserResponse])
 async def list_users(

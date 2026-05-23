@@ -12,6 +12,11 @@ class UserCreate(BaseModel):
     contrasena: str = Field(..., min_length=6)
 
 
+class UserAdminCreate(UserCreate):
+    rol_nombre: str
+    id_taller: Optional[uuid.UUID] = None
+
+
 class UserLogin(BaseModel):
     correo: EmailStr
     contrasena: str
