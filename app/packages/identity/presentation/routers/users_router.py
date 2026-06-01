@@ -7,9 +7,11 @@ from app.core.dependencies import get_current_active_user
 from app.packages.identity.domain.models import Usuario, ROL_SUPERADMIN, ROL_ADMIN_TALLER
 from app.packages.identity.infrastructure.repositories import UserRepository
 from app.packages.identity.presentation.schemas.auth_schemas import UserResponse, UserAdminCreate
+from app.packages.identity.presentation.schemas.auth_schemas import UserResponse, UserAdminCreate
 from app.packages.identity.presentation.schemas.user_schemas import UserProfileUpdate, VehicleCreate, VehicleResponse
 from app.packages.identity.application.user_use_cases.update_profile import UpdateProfileUseCase
 from app.packages.identity.application.user_use_cases.register_vehicle import RegisterVehicleUseCase
+from app.packages.identity.application.user_use_cases.create_user_admin import CreateUserAdminUseCase
 from app.packages.identity.application.user_use_cases.create_user_admin import CreateUserAdminUseCase
 from app.packages.workshops.infrastructure.repositories import WorkshopRepository
 from app.core.exceptions import ForbiddenError, NotFoundError

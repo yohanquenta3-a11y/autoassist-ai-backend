@@ -41,7 +41,6 @@ class Settings(BaseSettings):
     # Stripe Keys
     STRIPE_SECRET_KEY: str = "sk_test_placeholder"
     STRIPE_WEBHOOK_SECRET: str = "whsec_placeholder"
-    
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
     
