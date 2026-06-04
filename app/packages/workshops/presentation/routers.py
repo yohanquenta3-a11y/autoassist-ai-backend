@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_active_user
 from app.core.exceptions import NotFoundError, ForbiddenError
 from app.packages.identity.domain.models import Usuario
+from app.packages.workshops.dependencies import get_selected_branch_id, verify_write_permission, validate_resource_branch
 from app.packages.workshops.infrastructure.repositories import WorkshopRepository
 from app.packages.emergencies.infrastructure.repositories import IncidentRepository
 from app.packages.workshops.domain.models import Taller, SucursalTaller, UsuarioTaller
@@ -197,6 +198,7 @@ async def list_my_assignments(
     db: AsyncSession = Depends(get_db),
     page: Optional[int] = Query(None, ge=0, description="Página (0-indexed)"),
     size: Optional[int] = Query(None, ge=1, le=100, description="Tamaño de página"),
+    selected_branch_id: Optional[uuid.UUID] = Depends(get_selected_branch_id),
 ):
     """Lista las emergencias del taller vinculado al usuario logueado, con soporte opcional de paginación."""
     workshop_repo = WorkshopRepository(db)
@@ -207,7 +209,12 @@ async def list_my_assignments(
         raise ForbiddenError("No eres administrador de un taller.")
 
     skip = page * size if (page is not None and size is not None) else None
-    incidentes = await incident_repo.get_by_workshop(taller.id_taller, skip=skip, limit=size)
+    incidentes = await incident_repo.get_by_workshop(
+        taller_id=taller.id_taller,
+        id_sucursal=selected_branch_id,
+        skip=skip,
+        limit=size
+    )
     return [_build_incident_response(i) for i in incidentes]
 
 
@@ -217,6 +224,7 @@ async def update_assignment_status(
     update_in: StatusUpdate,
     current_user: Usuario = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
+    selected_branch_id: uuid.UUID = Depends(verify_write_permission),
 ):
     """Actualiza el estado de un incidente asignado al taller del usuario autenticado."""
     workshop_repo = WorkshopRepository(db)
@@ -225,6 +233,12 @@ async def update_assignment_status(
     taller = await workshop_repo.get_by_admin(current_user.id_usuario)
     if not taller:
         raise ForbiddenError("No eres administrador de un taller.")
+
+    incident = await incident_repo.get_by_id(incident_id)
+    if not incident:
+        raise NotFoundError("Incidente no encontrado.")
+
+    await validate_resource_branch(incident.id_sucursal, selected_branch_id, current_user, db)
 
     use_case = UpdateIncidentStatusUseCase(incident_repo)
     incident = await use_case.execute(
@@ -241,34 +255,34 @@ async def update_assignment_status(
 
     return _build_incident_response(incident)
     
-    return _build_incident_response(incident)
-    
 # --- Técnicos ---
 
 @router.post("/me/technicians", response_model=TecnicoResponse, status_code=status.HTTP_201_CREATED)
 async def register_technician(
     tecnico_in: TecnicoCreate,
     current_user: Usuario = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    selected_branch_id: uuid.UUID = Depends(verify_write_permission),
 ):
     """(CU14) Registrar un nuevo mecánico para el taller del usuario logueado."""
     from app.packages.workshops.application.manage_technicians import ManageTechniciansUseCase
     from app.packages.identity.infrastructure.repositories import UserRepository
     
     use_case = ManageTechniciansUseCase(WorkshopRepository(db), UserRepository(db))
-    return await use_case.add_technician(current_user, tecnico_in)
+    return await use_case.add_technician(current_user, tecnico_in, id_sucursal=selected_branch_id)
 
 @router.get("/me/technicians", response_model=list[TecnicoResponse])
 async def list_technicians(
     current_user: Usuario = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    selected_branch_id: Optional[uuid.UUID] = Depends(get_selected_branch_id),
 ):
     """(CU14) Listar todos los mecánicos del taller del usuario logueado."""
     from app.packages.workshops.application.manage_technicians import ManageTechniciansUseCase
     from app.packages.identity.infrastructure.repositories import UserRepository
     
     use_case = ManageTechniciansUseCase(WorkshopRepository(db), UserRepository(db))
-    return await use_case.list_technicians(current_user)
+    return await use_case.list_technicians(current_user, id_sucursal=selected_branch_id)
 
 
 @router.put("/me/technicians/{tecnico_id}", response_model=TecnicoResponse)
@@ -276,7 +290,8 @@ async def update_technician(
     tecnico_id: uuid.UUID,
     tecnico_in: "TecnicoUpdate",
     current_user: Usuario = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    selected_branch_id: uuid.UUID = Depends(verify_write_permission),
 ):
     """(CU14) Actualizar nombre y teléfono de un técnico del taller."""
     from app.packages.workshops.domain.models import Tecnico
@@ -297,6 +312,8 @@ async def update_technician(
     if not tecnico:
         raise NotFoundError("Técnico no encontrado en este taller.")
 
+    await validate_resource_branch(tecnico.id_sucursal, selected_branch_id, current_user, db)
+
     if tecnico_in.nombre is not None:
         tecnico.nombre = tecnico_in.nombre
     if tecnico_in.telefono is not None:
@@ -312,7 +329,8 @@ async def update_technician(
 async def toggle_technician_status(
     tecnico_id: uuid.UUID,
     current_user: Usuario = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    selected_branch_id: uuid.UUID = Depends(verify_write_permission),
 ):
     """(CU14) Soft Delete: Activar o desactivar un técnico del taller."""
     from app.packages.workshops.domain.models import Tecnico
@@ -333,6 +351,8 @@ async def toggle_technician_status(
     if not tecnico:
         raise NotFoundError("Técnico no encontrado en este taller.")
 
+    await validate_resource_branch(tecnico.id_sucursal, selected_branch_id, current_user, db)
+
     tecnico.estado = not tecnico.estado  # Toggle
     db.add(tecnico)
     await db.commit()
@@ -345,16 +365,37 @@ async def accept_assignment(
     incident_id: uuid.UUID,
     accept_in: IncidentAccept,
     current_user: Usuario = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    selected_branch_id: uuid.UUID = Depends(verify_write_permission),
 ):
     """(CU16) Aceptar un incidente y asignar un técnico."""
     from app.packages.workshops.application.accept_reject_incident import AcceptRejectIncidentUseCase
     from app.packages.assignment.infrastructure.repositories import AssignmentRepository
+    from app.packages.workshops.domain.models import Tecnico
+    from sqlalchemy.future import select
     
     workshop_repo = WorkshopRepository(db)
     taller = await workshop_repo.get_by_admin(current_user.id_usuario)
     if not taller:
         raise ForbiddenError("No eres administrador de un taller.")
+
+    # Load incident to validate branch
+    incident = await IncidentRepository(db).get_by_id(incident_id)
+    if not incident:
+        raise NotFoundError("Incidente no encontrado.")
+    await validate_resource_branch(incident.id_sucursal, selected_branch_id, current_user, db)
+
+    # Load technician to validate branch matches
+    result_tec = await db.execute(
+        select(Tecnico).where(
+            Tecnico.id_tecnico == accept_in.id_tecnico,
+            Tecnico.id_taller == taller.id_taller
+        )
+    )
+    tecnico = result_tec.scalar_one_or_none()
+    if not tecnico:
+        raise NotFoundError("Técnico no encontrado.")
+    await validate_resource_branch(tecnico.id_sucursal, selected_branch_id, current_user, db)
         
     use_case = AcceptRejectIncidentUseCase(
         IncidentRepository(db), 
@@ -374,7 +415,8 @@ async def accept_assignment(
 async def reject_assignment(
     incident_id: uuid.UUID,
     current_user: Usuario = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    selected_branch_id: uuid.UUID = Depends(verify_write_permission),
 ):
     """(CU16) Rechazar un incidente. Dispara la re-asignación inteligente."""
     from app.packages.workshops.application.accept_reject_incident import AcceptRejectIncidentUseCase
@@ -384,6 +426,12 @@ async def reject_assignment(
     taller = await workshop_repo.get_by_admin(current_user.id_usuario)
     if not taller:
         raise ForbiddenError("No eres administrador de un taller.")
+
+    # Load incident to validate branch
+    incident_to_check = await IncidentRepository(db).get_by_id(incident_id)
+    if not incident_to_check:
+        raise NotFoundError("Incidente no encontrado.")
+    await validate_resource_branch(incident_to_check.id_sucursal, selected_branch_id, current_user, db)
         
     use_case = AcceptRejectIncidentUseCase(IncidentRepository(db), AssignmentRepository(db))
     # Al rechazar, el resultado podría ser una nueva asignación o None si no hay más talleres
@@ -481,6 +529,10 @@ async def update_my_branch(
     if not taller:
         raise ForbiddenError("No tienes un taller registrado.")
 
+    from app.packages.identity.domain.models import ROL_ADMIN_TALLER
+    if current_user.rol_nombre != ROL_ADMIN_TALLER:
+        raise ForbiddenError("Solo el Owner del taller puede modificar sucursales.")
+
     sucursal = await repo.get_branch_by_id(id_sucursal, taller.id_taller)
     if not sucursal:
         raise NotFoundError("Sucursal no encontrada en tu taller.")
@@ -505,6 +557,10 @@ async def deactivate_my_branch(
     if not taller:
         raise ForbiddenError("No tienes un taller registrado.")
 
+    from app.packages.identity.domain.models import ROL_ADMIN_TALLER
+    if current_user.rol_nombre != ROL_ADMIN_TALLER:
+        raise ForbiddenError("Solo el Owner del taller puede cambiar el estado de las sucursales.")
+
     sucursal = await repo.get_branch_by_id(id_sucursal, taller.id_taller)
     if not sucursal:
         raise NotFoundError("Sucursal no encontrada en tu taller.")
@@ -523,6 +579,10 @@ async def assign_branch_admin(
     taller = await repo.get_by_admin(current_user.id_usuario)
     if not taller:
         raise ForbiddenError("No tienes un taller registrado.")
+
+    from app.packages.identity.domain.models import ROL_ADMIN_TALLER
+    if current_user.rol_nombre != ROL_ADMIN_TALLER:
+        raise ForbiddenError("Solo el Owner del taller puede asignar administradores de sucursal.")
 
     sucursal = await repo.get_branch_by_id(assign_in.id_sucursal, taller.id_taller)
     if not sucursal:

@@ -1,4 +1,5 @@
 import uuid
+from typing import Optional
 from app.packages.workshops.infrastructure.repositories import WorkshopRepository
 from app.packages.identity.infrastructure.repositories import UserRepository
 from app.packages.workshops.domain.models import Tecnico
@@ -12,7 +13,7 @@ class ManageTechniciansUseCase:
         self.workshop_repo = workshop_repo
         self.user_repo = user_repo
 
-    async def add_technician(self, admin_user: Usuario, tecnico_in: TecnicoCreate) -> Tecnico:
+    async def add_technician(self, admin_user: Usuario, tecnico_in: TecnicoCreate, id_sucursal: Optional[uuid.UUID] = None) -> Tecnico:
         # 1. Obtener el taller del administrador
         taller = await self.workshop_repo.get_by_admin(admin_user.id_usuario)
         if not taller:
@@ -51,6 +52,7 @@ class ManageTechniciansUseCase:
             id_tecnico=uuid.uuid4(),
             id_usuario=created_user.id_usuario,
             id_taller=taller.id_taller,
+            id_sucursal=id_sucursal,
             nombre=tecnico_in.nombre,
             telefono=tecnico_in.telefono,
             estado=True
@@ -60,9 +62,9 @@ class ManageTechniciansUseCase:
         saved_tecnico.temp_password = temp_pass
         return saved_tecnico
 
-    async def list_technicians(self, admin_user: Usuario) -> list[Tecnico]:
+    async def list_technicians(self, admin_user: Usuario, id_sucursal: Optional[uuid.UUID] = None) -> list[Tecnico]:
         taller = await self.workshop_repo.get_by_admin(admin_user.id_usuario)
         if not taller:
             raise ForbiddenError("No tienes un taller registrado.")
         
-        return await self.workshop_repo.get_technicians_by_workshop(taller.id_taller)
+        return await self.workshop_repo.get_technicians_by_workshop(taller.id_taller, id_sucursal=id_sucursal)

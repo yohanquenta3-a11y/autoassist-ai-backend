@@ -41,10 +41,7 @@ class UserRepository:
         user.id_taller = None
         user.id_sucursal = None
 
-        if user.rol_nombre not in ["admin_taller", "admin", "taller"]:
-            return None
-        
-        from app.packages.workshops.domain.models import AdministradorTaller, UsuarioTaller
+        from app.packages.workshops.domain.models import AdministradorTaller, UsuarioTaller, Tecnico
         
         # 1. Owner
         owner_result = await self.session.execute(
@@ -64,6 +61,16 @@ class UserRepository:
             user.id_taller = branch_link.id_taller
             user.id_sucursal = branch_link.id_sucursal
             return branch_link.rol_contexto
+
+        # 3. Tecnico
+        if user.rol_nombre == "tecnico":
+            tec_result = await self.session.execute(
+                select(Tecnico).where(Tecnico.id_usuario == user.id_usuario)
+            )
+            tec = tec_result.scalars().first()
+            if tec:
+                user.id_taller = tec.id_taller
+                user.id_sucursal = tec.id_sucursal
             
         return None
 
@@ -129,9 +136,14 @@ class UserRepository:
 
     # --- Filtrado Multi-tenant ---
 
-    async def get_all_with_filters(self, role: Optional[str] = None, workshop_id: Optional[uuid.UUID] = None) -> List[Usuario]:
+    async def get_all_with_filters(
+        self,
+        role: Optional[str] = None,
+        workshop_id: Optional[uuid.UUID] = None,
+        branch_id: Optional[uuid.UUID] = None
+    ) -> List[Usuario]:
         """
-        Obtiene usuarios filtrados por rol y/o taller.
+        Obtiene usuarios filtrados por rol, taller y/o sucursal.
         Si hay workshop_id, filtra administradores, técnicos y clientes atendidos por dicho taller.
         """
         from app.packages.workshops.domain.models import AdministradorTaller, UsuarioTaller, Tecnico
@@ -147,8 +159,14 @@ class UserRepository:
             from sqlalchemy import exists
 
             is_admin = exists().where(AdministradorTaller.id_usuario == Usuario.id_usuario).where(AdministradorTaller.id_taller == workshop_id)
-            is_member = exists().where(UsuarioTaller.id_usuario == Usuario.id_usuario).where(UsuarioTaller.id_taller == workshop_id)
-            is_tecnico = exists().where(Tecnico.id_usuario == Usuario.id_usuario).where(Tecnico.id_taller == workshop_id)
+            
+            if branch_id is not None:
+                is_member = exists().where(UsuarioTaller.id_usuario == Usuario.id_usuario).where(UsuarioTaller.id_taller == workshop_id).where(UsuarioTaller.id_sucursal == branch_id)
+                is_tecnico = exists().where(Tecnico.id_usuario == Usuario.id_usuario).where(Tecnico.id_taller == workshop_id).where(Tecnico.id_sucursal == branch_id)
+            else:
+                is_member = exists().where(UsuarioTaller.id_usuario == Usuario.id_usuario).where(UsuarioTaller.id_taller == workshop_id)
+                is_tecnico = exists().where(Tecnico.id_usuario == Usuario.id_usuario).where(Tecnico.id_taller == workshop_id)
+                
             is_cliente = exists().where(Vehiculo.id_usuario == Usuario.id_usuario).where(Incidente.id_vehiculo == Vehiculo.id_vehiculo).where(Incidente.id_taller == workshop_id)
             query = query.where(or_(is_admin, is_member, is_tecnico, is_cliente))
 

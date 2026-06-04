@@ -48,9 +48,22 @@ class WorkshopRepository:
             select(AdministradorTaller).where(AdministradorTaller.id_usuario == user_id)
         )
         admin_link = result.scalars().first()
-        if not admin_link:
-            return None
-        return await self.get_by_id(admin_link.id_taller)
+        if admin_link:
+            return await self.get_by_id(admin_link.id_taller)
+
+        # Fallback para administradores de sucursal u otros roles asociados al taller
+        from app.packages.workshops.domain.models import UsuarioTaller
+        result_ut = await self.session.execute(
+            select(UsuarioTaller).where(
+                UsuarioTaller.id_usuario == user_id,
+                UsuarioTaller.estado == True
+            )
+        )
+        ut_link = result_ut.scalars().first()
+        if ut_link:
+            return await self.get_by_id(ut_link.id_taller)
+
+        return None
 
     async def link_admin(self, admin_link: AdministradorTaller) -> AdministradorTaller:
         self.session.add(admin_link)
@@ -78,11 +91,12 @@ class WorkshopRepository:
         await self.session.refresh(tecnico)
         return tecnico
 
-    async def get_technicians_by_workshop(self, taller_id: uuid.UUID):
+    async def get_technicians_by_workshop(self, taller_id: uuid.UUID, id_sucursal: Optional[uuid.UUID] = None):
         from app.packages.workshops.domain.models import Tecnico
-        result = await self.session.execute(
-            select(Tecnico).where(Tecnico.id_taller == taller_id)
-        )
+        stmt = select(Tecnico).where(Tecnico.id_taller == taller_id)
+        if id_sucursal is not None:
+            stmt = stmt.where(Tecnico.id_sucursal == id_sucursal)
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def get_technician_by_id(self, tecnico_id: uuid.UUID):

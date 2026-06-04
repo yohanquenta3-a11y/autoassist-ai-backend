@@ -1,52 +1,57 @@
 import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import text
-from app.core.config import settings
+import uuid
+from sqlalchemy import select
+from app.core.database import AsyncSessionLocal
+from app.packages.workshops.domain.models import UsuarioTaller, SucursalTaller
+from app.packages.identity.domain.models import Usuario
+from app.packages.emergencies.domain.models import Incidente
 
-async def main():
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    
-    async with async_session() as session:
-        # Check users
-        print("--- USUARIOS ---")
-        result = await session.execute(text("SELECT id_usuario, nombre, correo, id_rol FROM usuarios"))
-        users = result.fetchall()
-        for u in users:
-            print(u)
+async def check():
+    session = AsyncSessionLocal()
+    try:
+        # Check user
+        user_res = await session.execute(select(Usuario).where(Usuario.correo.like('%alejandro%')))
+        user = user_res.scalars().first()
+        if not user:
+            print("User alejandro not found!")
+            return
+        print(f"User: {user.nombre} | ID: {user.id_usuario} | Rol: {user.rol_nombre}")
+        
+        # Check UsuarioTaller
+        ut_res = await session.execute(select(UsuarioTaller).where(UsuarioTaller.id_usuario == user.id_usuario))
+        ut_links = ut_res.scalars().all()
+        for x in ut_links:
+            print(f"UT Link: {x.id_usuario_taller} | Taller: {x.id_taller} | Branch: {x.id_sucursal} | Rol Contexto: {x.rol_contexto} | Estado: {x.estado}")
             
-        print("\n--- ROLES ---")
-        result = await session.execute(text("SELECT id_rol, nombre FROM roles"))
-        roles = result.fetchall()
-        for r in roles:
-            print(r)
+            if x.id_sucursal:
+                branch_res = await session.execute(select(SucursalTaller).where(SucursalTaller.id_sucursal == x.id_sucursal))
+                b = branch_res.scalars().first()
+                if b:
+                    print(f"  Branch Name: '{b.nombre}' | Is Active: {b.is_active}")
+        
+        # Check total incidents for this taller and branch
+        if ut_links:
+            taller_id = ut_links[0].id_taller
+            branch_id = ut_links[0].id_sucursal
             
-        print("\n--- ADMINISTRADORTALLER ---")
-        result = await session.execute(text("SELECT id_admin_taller, id_usuario, id_taller FROM administradortaller"))
-        admins = result.fetchall()
-        for a in admins:
-            print(a)
+            inc_all_res = await session.execute(select(Incidente).where(Incidente.id_taller == taller_id))
+            inc_all = inc_all_res.scalars().all()
+            print(f"\nTotal incidents for workshop {taller_id}: {len(inc_all)}")
             
-        print("\n--- USUARIO_TALLER ---")
-        result = await session.execute(text("SELECT id_usuario_taller, id_usuario, id_taller, id_sucursal, rol_contexto FROM usuario_taller"))
-        ut = result.fetchall()
-        for record in ut:
-            print(record)
-
-        print("\n--- TALLER ---")
-        result = await session.execute(text("SELECT id_taller, nombre, email FROM taller"))
-        t = result.fetchall()
-        for record in t:
-            print(record)
-
-        print("\n--- SUCURSAL_TALLER ---")
-        result = await session.execute(text("SELECT id_sucursal, id_taller, nombre, direccion FROM sucursal_taller"))
-        st = result.fetchall()
-        for record in st:
-            print(record)
+            inc_branch_res = await session.execute(select(Incidente).where(Incidente.id_taller == taller_id, Incidente.id_sucursal == branch_id))
+            inc_branch = inc_branch_res.scalars().all()
+            print(f"Total incidents for branch {branch_id}: {len(inc_branch)}")
             
-    await engine.dispose()
+            null_branch_res = await session.execute(select(Incidente).where(Incidente.id_taller == taller_id, Incidente.id_sucursal.is_(None)))
+            null_branch = null_branch_res.scalars().all()
+            print(f"Total incidents with NULL branch: {len(null_branch)}")
+            
+            # Print a few incidents to see their branch IDs
+            for i in inc_all[:5]:
+                print(f"Incident: {i.id_incidente} | Branch: {i.id_sucursal} | Estado: {i.estado_incidente}")
+                
+    finally:
+        await session.close()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(check())

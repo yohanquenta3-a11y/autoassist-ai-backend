@@ -82,8 +82,14 @@ class IncidentRepository:
         await self.session.commit()
         return incidente_target
 
-    async def get_by_workshop(self, taller_id: uuid.UUID, skip: Optional[int] = None, limit: Optional[int] = None) -> List[Incidente]:
-        """Obtiene la lista de incidentes asignados a un taller."""
+    async def get_by_workshop(
+        self,
+        taller_id: uuid.UUID,
+        id_sucursal: Optional[uuid.UUID] = None,
+        skip: Optional[int] = None,
+        limit: Optional[int] = None
+    ) -> List[Incidente]:
+        """Obtiene la lista de incidentes asignados a un taller, con filtro opcional de sucursal."""
         stmt = (
             select(Incidente)
             .options(
@@ -94,8 +100,12 @@ class IncidentRepository:
                 selectinload(Incidente.historial)
             )
             .where(Incidente.id_taller == taller_id)
-            .order_by(Incidente.fecha_reporte.desc())
         )
+        if id_sucursal is not None:
+            stmt = stmt.where(Incidente.id_sucursal == id_sucursal)
+            
+        stmt = stmt.order_by(Incidente.fecha_reporte.desc())
+        
         if skip is not None:
             stmt = stmt.offset(skip)
         if limit is not None:
@@ -138,6 +148,33 @@ class IncidentRepository:
                 selectinload(Incidente.historial)
             )
             .where(Vehiculo.id_usuario == user_id)
+            .where(Incidente.estado_incidente.notin_(["FINALIZADO", "CANCELADO", "COMPLETADO"]))
+            .order_by(Incidente.fecha_reporte.desc())
+        )
+        return result.scalars().first()
+
+    async def get_active_by_technician(self, technician_user_id: uuid.UUID) -> Optional[Incidente]:
+        """Obtiene el incidente activo asignado a un técnico por su id_usuario de la tabla usuarios."""
+        from app.packages.workshops.domain.models import Tecnico
+        # 1. Obtener el técnico a partir del id_usuario
+        tecnico_res = await self.session.execute(
+            select(Tecnico).where(Tecnico.id_usuario == technician_user_id)
+        )
+        tecnico = tecnico_res.scalars().first()
+        if not tecnico:
+            return None
+            
+        # 2. Buscar incidente activo asignado a este técnico
+        result = await self.session.execute(
+            select(Incidente)
+            .options(
+                joinedload(Incidente.vehiculo).joinedload(Vehiculo.propietario),
+                joinedload(Incidente.taller),
+                joinedload(Incidente.tecnico),
+                selectinload(Incidente.evidencias),
+                selectinload(Incidente.historial)
+            )
+            .where(Incidente.id_tecnico == tecnico.id_tecnico)
             .where(Incidente.estado_incidente.notin_(["FINALIZADO", "CANCELADO", "COMPLETADO"]))
             .order_by(Incidente.fecha_reporte.desc())
         )

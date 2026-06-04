@@ -6,10 +6,10 @@ services:
     restart: always
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - SECRET_KEY=${SECRET_KEY:-super-secret-local-key-for-development}
-      - ROBOFLOW_API_KEY=${ROBOFLOW_API_KEY:-wuOFKaZQdzfzS4EOZNnp}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-AIzaSyABqE-z2_n0JtKN0aui9y9IE5bpPqHJgLs}
-      - FIREBASE_SERVICE_ACCOUNT_PATH=${FIREBASE_SERVICE_ACCOUNT_PATH:-smart-mechanic-4a35e-firebase-adminsdk-fbsvc-b9d0bc3427.json}
+      - SECRET_KEY=${SECRET_KEY}
+      - ROBOFLOW_API_KEY=${ROBOFLOW_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=${FIREBASE_SERVICE_ACCOUNT_PATH}
     ports:
       - "8000:8000"
     volumes:

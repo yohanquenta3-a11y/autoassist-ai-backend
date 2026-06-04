@@ -35,6 +35,7 @@ class CreateIncidentUseCase:
 
         new_incident = Incidente(
             id_vehiculo=vehicle.id_vehiculo,
+            id_usuario_cliente=current_user.id_usuario,
             descripcion=incident_in.descripcion,
             telefono=incident_in.telefono,
             ubicacion_emergencia=point_wkt,

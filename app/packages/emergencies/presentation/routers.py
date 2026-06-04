@@ -9,7 +9,7 @@ from app.core.dependencies import get_current_active_user
 from app.packages.identity.domain.models import Usuario
 from app.packages.identity.infrastructure.repositories import UserRepository
 from app.packages.emergencies.infrastructure.repositories import IncidentRepository
-from app.packages.emergencies.presentation.schemas import IncidentCreate, IncidentResponse, EvidenceResponse, TrackingRequest
+from app.packages.emergencies.presentation.schemas import IncidentCreate, IncidentResponse, EvidenceResponse, TrackingRequest, IncidentStatusUpdate
 from app.packages.emergencies.application.create_incident import CreateIncidentUseCase
 from app.packages.emergencies.application.upload_evidence import UploadEvidenceUseCase
 from app.packages.emergencies.application.analyze_incident_ai import AnalyzeIncidentAIUseCase
@@ -79,10 +79,14 @@ async def get_my_active_incident(
     incident_repo: IncidentRepository = Depends(get_incident_repository)
 ):
     """
-    (CU Móvil) Consulta si el usuario tiene una emergencia activa.
+    (CU Móvil) Consulta si el usuario (cliente o técnico) tiene una emergencia activa.
     Retorna el incidente con detalles de taller y técnico si existen.
     """
-    incident = await incident_repo.get_active_by_user(current_user.id_usuario)
+    if current_user.rol_nombre == "tecnico":
+        incident = await incident_repo.get_active_by_technician(current_user.id_usuario)
+    else:
+        incident = await incident_repo.get_active_by_user(current_user.id_usuario)
+        
     if not incident:
         return None
     return _build_incident_response(incident)
@@ -241,6 +245,114 @@ async def cancel_incident(
     return _build_incident_response(result)
 
 
+@router.patch("/{incident_id}/status", response_model=IncidentResponse)
+async def update_incident_status_mobile(
+    incident_id: uuid.UUID,
+    payload: IncidentStatusUpdate,
+    current_user: Usuario = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    (CU Técnico Móvil) Permite al técnico asignado o al administrador del taller
+    actualizar el estado de la emergencia (TALLER_ASIGNADO -> EN_CAMINO -> EN_ATENCION -> FINALIZADO).
+    """
+    from app.core.exceptions import NotFoundError, ForbiddenError
+    from app.packages.workshops.domain.models import Tecnico, AdministradorTaller, UsuarioTaller
+    from sqlalchemy.future import select
+    from app.packages.emergencies.domain.models import HistorialIncidente
+
+    # 1. Obtener incidente
+    incident_repo = IncidentRepository(db)
+    incidente = await incident_repo.get_by_id(incident_id)
+    if not incidente:
+        raise NotFoundError("Incidente no encontrado.")
+
+    # 2. Validar autorización según rol del usuario
+    authorized = False
+    
+    if current_user.rol_nombre == "tecnico":
+        # Comprobar que sea el técnico asignado a este incidente
+        tecnico_res = await db.execute(
+            select(Tecnico).where(Tecnico.id_usuario == current_user.id_usuario)
+        )
+        tecnico = tecnico_res.scalars().first()
+        if tecnico and incidente.id_tecnico == tecnico.id_tecnico:
+            authorized = True
+    elif current_user.rol_nombre == "admin_taller":
+        # Comprobar si es administrador del taller asignado a la emergencia
+        # O si es admin de la sucursal asignada a la emergencia
+        relation = await db.execute(
+            select(UsuarioTaller).where(UsuarioTaller.id_usuario == current_user.id_usuario)
+        )
+        user_taller = relation.scalars().first()
+        if user_taller:
+            # Si es admin de sucursal, debe coincidir la sucursal
+            if user_taller.rol_contexto == "admin_sucursal" and incidente.id_sucursal == user_taller.id_sucursal:
+                authorized = True
+            # Si es owner del taller
+            elif user_taller.rol_contexto == "owner" and incidente.id_taller == user_taller.id_taller:
+                authorized = True
+        else:
+            # Buscar en AdministradorTaller (Owners globales)
+            admin_res = await db.execute(
+                select(AdministradorTaller).where(AdministradorTaller.id_usuario == current_user.id_usuario)
+            )
+            admin_link = admin_res.scalars().first()
+            if admin_link and incidente.id_taller == admin_link.id_taller:
+                authorized = True
+    elif current_user.rol_nombre == "superadmin":
+        authorized = True
+
+    if not authorized:
+        raise ForbiddenError("No tienes permisos para modificar el estado de esta emergencia.")
+
+    # 3. Registrar cambio en historial y actualizar estado
+    estado_anterior = incidente.estado_incidente
+    incidente.estado_incidente = payload.nuevo_estado
+    
+    # Si pasa a finalizado o cancelado, liberar al técnico (hacerlo disponible)
+    if payload.nuevo_estado in ["FINALIZADO", "CANCELADO", "COMPLETADO"] and incidente.tecnico:
+        incidente.tecnico.estado = True # Disponible para nuevas asignaciones
+        
+    historial = HistorialIncidente(
+        id_incidente=incidente.id_incidente,
+        incidente_estado_anterior=estado_anterior,
+        incidente_estado_nuevo=payload.nuevo_estado,
+        historial_actor=f"{current_user.rol_nombre.upper()}:{current_user.nombre}",
+        fecha=None
+    )
+    incidente.historial.append(historial)
+    
+    await db.commit()
+    await db.refresh(incidente)
+
+    # 4. Notificaciones en Tiempo Real (WebSocket y push si corresponde)
+    from app.core.notifications import manager as notify_manager
+    from app.core.websocket import manager as ws_manager
+    
+    # Estructura del evento de actualización de estado
+    status_event = {
+        "type": "STATUS_UPDATED",
+        "data": {
+            "id_incidente": str(incident_id),
+            "estado_anterior": estado_anterior,
+            "estado_nuevo": payload.nuevo_estado,
+            "id_taller": str(incidente.id_taller) if incidente.id_taller else None,
+            "id_tecnico": str(incidente.id_tecnico) if incidente.id_tecnico else None,
+        }
+    }
+    
+    # Emitir por canal WebSocket del incidente (al cliente)
+    await ws_manager.broadcast_to_incident(str(incident_id), status_event)
+    
+    # Notificar a canales generales (Admins web, taller, etc.)
+    if incidente.id_taller:
+        await notify_manager.notify_workshop(str(incidente.id_taller), status_event)
+    await notify_manager.notify_admins(status_event)
+
+    return _build_incident_response(incidente)
+
+
 @router.post("/incidents/{incident_id}/tracking", status_code=status.HTTP_201_CREATED)
 async def post_incident_tracking(
     incident_id: uuid.UUID,
@@ -363,32 +475,130 @@ async def websocket_endpoint(
     websocket: WebSocket,
     incident_id: str,
     token: Optional[str] = Query(None),
+    id_sucursal: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Endpoint WebSocket para suscribirse a eventos de tracking y estados en vivo de un incidente.
-    Valida opcionalmente el token JWT por parámetros de consulta.
+    Valida el token JWT por parámetros de consulta y aplica scoping por rol y sucursal.
     """
-    if token:
-        try:
-            from jose import jwt
-            from app.core.config import settings
-            from app.packages.identity.infrastructure.repositories import UserRepository
-            
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            user_uuid = payload.get("sub")
-            if user_uuid:
-                repo = UserRepository(db)
-                user = await repo.get_by_id(uuid.UUID(user_uuid))
-                if not user or not user.estado:
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                    return
-            else:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-        except Exception:
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    try:
+        from jose import jwt
+        from app.core.config import settings
+        from app.packages.identity.infrastructure.repositories import UserRepository
+        from app.packages.emergencies.infrastructure.repositories import IncidentRepository
+        from app.packages.workshops.domain.models import UsuarioTaller, AdministradorTaller, Tecnico
+        from sqlalchemy import select
+        import uuid
+        
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_uuid = payload.get("sub")
+        if not user_uuid:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
+
+        repo = UserRepository(db)
+        user = await repo.get_by_id(uuid.UUID(user_uuid))
+        if not user or not user.estado:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # Load incident
+        incident_repo = IncidentRepository(db)
+        incident = await incident_repo.get_by_id(uuid.UUID(incident_id))
+        if not incident:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        role = user.rol_nombre
+
+        # Role-based Scoping
+        if role != "superadmin":
+            if role == "cliente":
+                # Check that client owns the incident's vehicle
+                if not incident.vehiculo or incident.vehiculo.id_usuario != user.id_usuario:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+            
+            elif role == "tecnico":
+                # Check that technician is assigned to this incident
+                result_tec = await db.execute(
+                    select(Tecnico).where(
+                        Tecnico.id_usuario == user.id_usuario,
+                        Tecnico.estado == True
+                    )
+                )
+                tec = result_tec.scalars().first()
+                if not tec or incident.id_tecnico != tec.id_tecnico:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+
+            else:
+                # Check if Admin Sucursal
+                result_ut = await db.execute(
+                    select(UsuarioTaller).where(
+                        UsuarioTaller.id_usuario == user.id_usuario,
+                        UsuarioTaller.rol_contexto == "admin_sucursal",
+                        UsuarioTaller.estado == True
+                    )
+                )
+                ut_link = result_ut.scalars().first()
+
+                # Check if Owner
+                result_owner = await db.execute(
+                    select(AdministradorTaller).where(AdministradorTaller.id_usuario == user.id_usuario)
+                )
+                is_owner = result_owner.scalars().first() is not None
+
+                # Clean query param id_sucursal
+                clean_sucursal_param = None
+                if id_sucursal:
+                    cleaned = id_sucursal.strip().lower()
+                    if cleaned not in ("", "null", "undefined", "none"):
+                        try:
+                            clean_sucursal_param = uuid.UUID(cleaned)
+                        except ValueError:
+                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                            return
+
+                if is_owner and not ut_link:
+                    # Owner must select a branch and the incident must belong to that branch
+                    if not clean_sucursal_param:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+                    
+                    # Check Owner workshop
+                    from app.packages.workshops.infrastructure.repositories import WorkshopRepository
+                    workshop_repo = WorkshopRepository(db)
+                    taller = await workshop_repo.get_by_admin(user.id_usuario)
+                    if not taller or incident.id_taller != taller.id_taller:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+
+                    # Validate selected branch belongs to workshop
+                    branch = await workshop_repo.get_branch_by_id(clean_sucursal_param, taller.id_taller)
+                    if not branch or not branch.is_active or incident.id_sucursal != clean_sucursal_param:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+
+                elif ut_link:
+                    # Admin Sucursal: incident must belong to their branch
+                    if not ut_link.id_sucursal or incident.id_sucursal != ut_link.id_sucursal:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+
+                else:
+                    # Any other role without access
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+
+    except Exception:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
     from app.core.websocket import manager as ws_manager
     await ws_manager.connect(incident_id, websocket)

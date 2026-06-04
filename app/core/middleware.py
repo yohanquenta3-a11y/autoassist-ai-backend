@@ -50,15 +50,65 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     desc = f"Status: {response.status_code}"
                     if "login" in path:
                         desc = "Inicio de sesión exitoso"
+
+                    # Extraer campos de auditoría avanzada del estado de la request
+                    rol_usuario = getattr(request.state, "rol_usuario", None)
+                    id_taller = getattr(request.state, "id_taller", None)
+                    id_sucursal_contexto = getattr(request.state, "id_sucursal_contexto", None)
+                    id_sucursal_afectada = getattr(request.state, "id_sucursal_afectada", None)
+                    tipo_entidad = getattr(request.state, "tipo_entidad", None)
+                    id_entidad = getattr(request.state, "id_entidad", None)
+                    datos_antes = getattr(request.state, "datos_antes", None)
+                    datos_despues = getattr(request.state, "datos_despues", None)
+
+                    # Si faltan datos básicos de rol o taller, intentar cargarlos de BD
+                    if user_id != "LOGIN_PENDING" and (not rol_usuario or not id_taller):
+                        try:
+                            from app.packages.identity.infrastructure.repositories import UserRepository
+                            from app.packages.workshops.infrastructure.repositories import WorkshopRepository
+                            import uuid
+                            async with AsyncSessionLocal() as db_session:
+                                user_repo = UserRepository(db_session)
+                                user_obj = await user_repo.get_by_id(uuid.UUID(user_id))
+                                if user_obj:
+                                    rol_usuario = user_obj.rol_nombre
+                                    workshop_repo = WorkshopRepository(db_session)
+                                    taller = await workshop_repo.get_by_admin(user_obj.id_usuario)
+                                    if taller:
+                                        id_taller = taller.id_taller
+                                    else:
+                                        from app.packages.workshops.domain.models import UsuarioTaller
+                                        from sqlalchemy.future import select
+                                        ut_res = await db_session.execute(
+                                            select(UsuarioTaller).where(
+                                                UsuarioTaller.id_usuario == user_obj.id_usuario,
+                                                UsuarioTaller.estado == True
+                                            )
+                                        )
+                                        ut_link = ut_res.scalars().first()
+                                        if ut_link:
+                                            id_taller = ut_link.id_taller
+                                            if not id_sucursal_contexto:
+                                                id_sucursal_contexto = ut_link.id_sucursal
+                        except Exception as e:
+                            logger.warning(f"Error cargando detalles para bitácora: {e}")
                     
                     import asyncio
                     asyncio.create_task(save_audit_log(
-                        user_id=user_id if user_id != "LOGIN_PENDING" else "00000000-0000-0000-0000-000000000000", # System user or placeholder
+                        user_id=user_id if user_id != "LOGIN_PENDING" else "00000000-0000-0000-0000-000000000000",
                         ip=ip,
                         method=request.method,
                         path=path,
                         status_code=response.status_code,
-                        descripcion=desc
+                        descripcion=desc,
+                        rol_usuario=rol_usuario,
+                        id_taller=id_taller,
+                        id_sucursal_contexto=id_sucursal_contexto,
+                        id_sucursal_afectada=id_sucursal_afectada,
+                        tipo_entidad=tipo_entidad,
+                        id_entidad=id_entidad,
+                        datos_antes=datos_antes,
+                        datos_despues=datos_despues
                     ))
                 
                 # OPCIONAL: Si quieres capturar TODO (incluyendo GET) de forma masiva

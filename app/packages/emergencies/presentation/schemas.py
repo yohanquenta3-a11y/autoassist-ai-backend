@@ -66,3 +66,7 @@ class TrackingRequest(BaseModel):
     latitud: float = Field(..., ge=-90, le=90)
     longitud: float = Field(..., ge=-180, le=180)
     velocidad: Optional[float] = None
+
+
+class IncidentStatusUpdate(BaseModel):
+    nuevo_estado: str = Field(..., pattern="^(TALLER_ASIGNADO|EN_CAMINO|EN_ATENCION|FINALIZADO|CANCELADO|COMPLETADO)$")

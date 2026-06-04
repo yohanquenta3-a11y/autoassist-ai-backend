@@ -14,6 +14,7 @@ from app.packages.identity.application.user_use_cases.register_vehicle import Re
 from app.packages.identity.application.user_use_cases.create_user_admin import CreateUserAdminUseCase
 from app.packages.identity.application.user_use_cases.create_user_admin import CreateUserAdminUseCase
 from app.packages.workshops.infrastructure.repositories import WorkshopRepository
+from app.packages.workshops.dependencies import get_selected_branch_id
 from app.core.exceptions import ForbiddenError, NotFoundError
 import uuid
 from typing import Optional
@@ -73,7 +74,8 @@ async def list_users(
     role: Optional[str] = None,
     id_taller: Optional[uuid.UUID] = None,
     current_user: Usuario = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    selected_branch_id: Optional[uuid.UUID] = Depends(get_selected_branch_id)
 ):
     """
     (Admin) Listado de usuarios con filtros globales y multi-tenant.
@@ -94,7 +96,7 @@ async def list_users(
         # Forzamos el filtro a su taller
         id_taller = taller.id_taller
 
-    return await user_repo.get_all_with_filters(role=role, workshop_id=id_taller)
+    return await user_repo.get_all_with_filters(role=role, workshop_id=id_taller, branch_id=selected_branch_id)
 
 @users_router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: Usuario = Depends(get_current_active_user)):

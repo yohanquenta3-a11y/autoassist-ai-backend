@@ -27,7 +27,7 @@ async def track_incident(
         raise NotFoundError("Incidente no encontrado.")
         
     # VALIDACIÓN SAAS: Verificar que el incidente pertenece al usuario logueado
-    if incidente.id_usuario != current_user.id_usuario:
+    if incidente.id_usuario_cliente != current_user.id_usuario:
         raise ForbiddenError("No tienes permiso para ver el estado de esta emergencia.")
     
     return incidente
