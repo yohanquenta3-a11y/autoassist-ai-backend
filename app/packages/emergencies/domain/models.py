@@ -1,5 +1,6 @@
 import uuid
-from sqlalchemy import Column, String, Text, DateTime, Numeric, ForeignKey, ForeignKeyConstraint
+from typing import Optional
+from sqlalchemy import Column, String, Text, DateTime, Numeric, ForeignKey, ForeignKeyConstraint, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from geoalchemy2 import Geography
@@ -41,6 +42,31 @@ class Incidente(Base):
     tecnico = relationship("Tecnico", foreign_keys=[id_tecnico])
     evidencias = relationship("EvidenciaIncidente", back_populates="incidente", cascade="all, delete-orphan")
     historial = relationship("HistorialIncidente", back_populates="incidente", cascade="all, delete-orphan")
+    verificaciones = relationship("VerificacionTecnico", back_populates="incidente", cascade="all, delete-orphan", lazy="selectin")
+    pago = relationship(
+        "app.packages.finance.domain.models.Pago",
+        uselist=False,
+        primaryjoin="Incidente.id_incidente==Pago.id_incidente",
+        lazy="selectin",
+        viewonly=True
+    )
+
+
+    @property
+    def latest_verification(self) -> Optional["VerificacionTecnico"]:
+        if not self.verificaciones:
+            return None
+        return sorted(self.verificaciones, key=lambda v: v.fecha_creacion)[-1]
+    sucursal = relationship(
+        "SucursalTaller",
+        primaryjoin="and_(Incidente.id_sucursal==SucursalTaller.id_sucursal, Incidente.id_taller==SucursalTaller.id_taller)",
+        lazy="selectin",
+        viewonly=True
+    )
+
+    @property
+    def branch_name(self) -> Optional[str]:
+        return self.sucursal.nombre if (self.id_sucursal and self.sucursal) else "Sin sucursal asignada"
 
     # Restricción de integridad compuesta para asegurar que la sucursal asignada pertenece al mismo taller (tenant)
     __table_args__ = (
@@ -93,3 +119,27 @@ class HistorialIncidente(Base):
             name='fk_historial_incidente_sucursal'
         ),
     )
+
+
+class VerificacionTecnico(Base):
+    """Registro de la verificación segura de identidad del técnico en sitio (CU30)."""
+    __tablename__ = "verificacion_tecnico"
+
+    id_verificacion = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_incidente = Column(UUID(as_uuid=True), ForeignKey("incidente.id_incidente"), nullable=False)
+    id_asignacion = Column(UUID(as_uuid=True), ForeignKey("asignacion_incidente.id_asignacion"), nullable=True)
+    id_tecnico = Column(UUID(as_uuid=True), ForeignKey("tecnico.id_tecnico"), nullable=False)
+    metodo_verificacion = Column(String(50), default="PIN", nullable=False)       # "PIN", "QR", "MANUAL_OVERRIDE"
+    codigo_verificacion = Column(String(10), nullable=False)                      # Código PIN de 6 dígitos
+    estado_verificacion = Column(String(50), default="PENDIENTE", nullable=False)  # "PENDIENTE", "VERIFICADO", "RECHAZADO_ERROR", "BLOQUEADO"
+    fecha_verificacion = Column(DateTime, nullable=True)
+    resultado = Column(String(50), default="PENDIENTE", nullable=False)           # "PENDIENTE", "EXITOSO", "FALLIDO", "MISMATCH"
+    intentos = Column(Integer, default=0, nullable=False)
+    usuario_validador = Column(String(150), nullable=True)                        # Quién validó (cliente o admin)
+    motivo_override = Column(Text, nullable=True)                                 # Motivo del override manual si corresponde
+    fecha_creacion = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relaciones
+    incidente = relationship("Incidente", back_populates="verificaciones")
+    tecnico = relationship("app.packages.workshops.domain.models.Tecnico")
+    asignacion = relationship("app.packages.assignment.domain.models.AsignacionIncidente")

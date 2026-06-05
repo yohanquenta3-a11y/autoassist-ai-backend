@@ -30,7 +30,9 @@ class IncidentRepository:
                 joinedload(Incidente.taller),
                 joinedload(Incidente.tecnico),
                 selectinload(Incidente.evidencias),
-                selectinload(Incidente.historial)
+                selectinload(Incidente.historial),
+                selectinload(Incidente.verificaciones),
+                selectinload(Incidente.pago)
             )
             .where(Incidente.id_incidente == incident_id)
         )
@@ -62,7 +64,10 @@ class IncidentRepository:
             .where(Vehiculo.id_usuario == user_id)
             .where(Incidente.estado_incidente.notin_(["FINALIZADO", "CANCELADO", "COMPLETADO"]))
         )
-        activos = result.scalars().all()
+        activos = list(result.scalars().all())
+        
+        if incidente_target not in activos and incidente_target.estado_incidente not in ("CANCELADO", "COMPLETADO"):
+            activos.append(incidente_target)
         
         for inc in activos:
             estado_anterior = inc.estado_incidente
@@ -97,7 +102,9 @@ class IncidentRepository:
                 joinedload(Incidente.taller),
                 joinedload(Incidente.tecnico),
                 selectinload(Incidente.evidencias),
-                selectinload(Incidente.historial)
+                selectinload(Incidente.historial),
+                selectinload(Incidente.verificaciones),
+                selectinload(Incidente.pago)
             )
             .where(Incidente.id_taller == taller_id)
         )
@@ -123,7 +130,9 @@ class IncidentRepository:
                 joinedload(Incidente.taller),
                 joinedload(Incidente.tecnico),
                 selectinload(Incidente.evidencias),
-                selectinload(Incidente.historial)
+                selectinload(Incidente.historial),
+                selectinload(Incidente.verificaciones),
+                selectinload(Incidente.pago)
             )
             .order_by(Incidente.fecha_reporte.desc())
         )
@@ -145,10 +154,12 @@ class IncidentRepository:
                 joinedload(Incidente.taller),
                 joinedload(Incidente.tecnico),
                 selectinload(Incidente.evidencias),
-                selectinload(Incidente.historial)
+                selectinload(Incidente.historial),
+                selectinload(Incidente.verificaciones),
+                selectinload(Incidente.pago)
             )
             .where(Vehiculo.id_usuario == user_id)
-            .where(Incidente.estado_incidente.notin_(["FINALIZADO", "CANCELADO", "COMPLETADO"]))
+            .where(Incidente.estado_incidente.notin_(["CANCELADO", "COMPLETADO"]))
             .order_by(Incidente.fecha_reporte.desc())
         )
         return result.scalars().first()
@@ -172,7 +183,9 @@ class IncidentRepository:
                 joinedload(Incidente.taller),
                 joinedload(Incidente.tecnico),
                 selectinload(Incidente.evidencias),
-                selectinload(Incidente.historial)
+                selectinload(Incidente.historial),
+                selectinload(Incidente.verificaciones),
+                selectinload(Incidente.pago)
             )
             .where(Incidente.id_tecnico == tecnico.id_tecnico)
             .where(Incidente.estado_incidente.notin_(["FINALIZADO", "CANCELADO", "COMPLETADO"]))
@@ -192,7 +205,9 @@ class IncidentRepository:
                 joinedload(Incidente.taller),
                 joinedload(Incidente.tecnico),
                 selectinload(Incidente.evidencias),
-                selectinload(Incidente.historial)
+                selectinload(Incidente.historial),
+                selectinload(Incidente.verificaciones),
+                selectinload(Incidente.pago)
             )
             .where(Vehiculo.id_usuario == user_id)
             .order_by(Incidente.fecha_reporte.desc())

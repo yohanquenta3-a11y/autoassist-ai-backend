@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import Column, String, Boolean, ForeignKey, Time, DateTime, ForeignKeyConstraint, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -117,6 +118,16 @@ class Tecnico(Base):
 
     taller = relationship("Taller", back_populates="tecnicos")
     disponibilidades = relationship("DisponibilidadTecnico", back_populates="tecnico", cascade="all, delete-orphan")
+    sucursal = relationship(
+        "SucursalTaller",
+        primaryjoin="and_(Tecnico.id_sucursal==SucursalTaller.id_sucursal, Tecnico.id_taller==SucursalTaller.id_taller)",
+        lazy="selectin",
+        viewonly=True
+    )
+
+    @property
+    def branch_name(self) -> Optional[str]:
+        return self.sucursal.nombre if (self.id_sucursal and self.sucursal) else "Sin sucursal asignada"
 
     __table_args__ = (
         ForeignKeyConstraint(

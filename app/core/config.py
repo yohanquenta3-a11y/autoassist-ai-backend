@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
     
+    # Asignacion de taller
+    MATCH_RADIUS_KM: float = 15.0
+    
     # Pydantic Configuration para leer el .env
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore")
 

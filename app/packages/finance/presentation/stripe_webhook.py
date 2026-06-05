@@ -83,11 +83,26 @@ async def stripe_webhook(
                 user_id = str(incident.vehiculo.id_usuario)
                 
                 # A. WebSocket
+                status_event = {
+                    "type": "STATUS_UPDATED",
+                    "data": {
+                        "id_incidente": str(incident_id),
+                        "estado_anterior": "FINALIZADO",
+                        "estado_nuevo": "COMPLETADO",
+                        "id_taller": str(incident.id_taller),
+                        "id_tecnico": str(incident.id_tecnico) if incident.id_tecnico else None,
+                    }
+                }
+                from app.core.websocket import manager as ws_manager
+                await manager.notify_user(user_id, status_event)
                 await manager.notify_user(user_id, {
                     "type": "PAYMENT_CONFIRMED",
                     "incident_id": str(incident_id),
                     "status": "COMPLETADO"
                 })
+                await manager.notify_workshop(str(incident.id_taller), status_event)
+                await manager.notify_admins(status_event)
+                await ws_manager.broadcast_to_incident(str(incident_id), status_event)
                 
                 # B. Push Notification
                 fcm_token = incident.vehiculo.propietario.fcm_token if incident.vehiculo.propietario else None

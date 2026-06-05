@@ -54,8 +54,7 @@ async def websocket_endpoint(
             # Check if Técnico
             result_tec = await db.execute(
                 select(Tecnico).where(
-                    Tecnico.id_usuario == user.id_usuario,
-                    Tecnico.estado == True
+                    Tecnico.id_usuario == user.id_usuario
                 )
             )
             tec = result_tec.scalars().first()

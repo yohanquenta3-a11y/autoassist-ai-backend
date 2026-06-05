@@ -1,5 +1,6 @@
 import uuid
 from decimal import Decimal
+from datetime import datetime
 from app.packages.finance.infrastructure.repositories import FinanceRepository
 from app.packages.emergencies.infrastructure.repositories import IncidentRepository
 from app.packages.finance.domain.models import Pago
@@ -27,26 +28,29 @@ class CloseIncidentUseCase:
 
         # Idempotencia: Si ya está completado, retornar el pago existente
         if incidente.estado_incidente == "COMPLETADO":
-            from sqlalchemy.future import select
-            result = await self.incident_repo.session.execute(
-                select(Pago).where(Pago.id_incidente == id_incidente)
-            )
-            existing_pago = result.scalar_one_or_none()
+            existing_pago = await self.finance_repo.get_payment_by_incident(id_incidente)
             if existing_pago:
                 return existing_pago
 
-        # 2. Calcular comisión (10%)
+        # 2. Buscar si ya existe un registro de pago (creado en la facturación)
+        pago = await self.finance_repo.get_payment_by_incident(id_incidente)
+        
         comision = monto_total * Decimal("0.10")
         
-        # 3. Crear registro de pago
-        pago = Pago(
-            id_incidente=id_incidente,
-            id_taller=id_taller,
-            monto=monto_total,
-            monto_comision=comision,
-            estado_pago="PAGADO",
-            fecha_pago=None # SQLAlchemy lo manejará si hay default, sino se asignará
-        )
+        if pago:
+            pago.estado_pago = "PAGADO"
+            pago.fecha_pago = datetime.utcnow()
+            pago.monto = monto_total
+            pago.monto_comision = comision
+        else:
+            pago = Pago(
+                id_incidente=id_incidente,
+                id_taller=id_taller,
+                monto=monto_total,
+                monto_comision=comision,
+                estado_pago="PAGADO",
+                fecha_pago=datetime.utcnow()
+            )
         
         # 4. Actualizar incidente e Historial
         estado_anterior = incidente.estado_incidente

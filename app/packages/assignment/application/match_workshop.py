@@ -26,10 +26,11 @@ class MatchWorkshopUseCase:
 
         logger.info(f"Buscando taller para incidente {id_incidente} en {incidente.ubicacion_emergencia} (Excluyendo: {exclude_ids})")
 
-        # 2. Buscar talleres cercanos (Radio 15km)
+        # 2. Buscar talleres cercanos usando radio de configuración
+        from app.core.config import settings
         nearby = await self.assignment_repo.get_nearby_workshops(
             point=incidente.ubicacion_emergencia,
-            radius_km=15.0,
+            radius_km=settings.MATCH_RADIUS_KM,
             limit=1,
             exclude_ids=exclude_ids
         )
@@ -38,12 +39,14 @@ class MatchWorkshopUseCase:
             logger.error(f"No se encontraron talleres disponibles cerca del incidente {id_incidente}")
             incidente.estado_incidente = "SIN_TALLER_DISPONIBLE"
             incidente.id_taller = None # Limpiamos si no hay nada
+            incidente.id_sucursal = None
             await self.incident_repo.session.commit()
             return None
 
-        # Tomamos el primero (el más cercano disponible)
-        best_taller, distance_meters = nearby[0]
-        logger.info(f"Taller encontrado: {best_taller.nombre} a {distance_meters:.2f}m")
+        # Tomamos el primero (la sucursal más cercana disponible)
+        best_branch, distance_meters = nearby[0]
+        best_taller = best_branch.taller
+        logger.info(f"Taller encontrado: {best_taller.nombre} (Sucursal: {best_branch.nombre}) a {distance_meters:.2f}m")
             
         # 3. Crear asignación
         new_assignment = AsignacionIncidente(
@@ -55,12 +58,8 @@ class MatchWorkshopUseCase:
             distancia_km=distance_meters / 1000.0
         )
         
-        # Nota: Mi modelo AsignacionIncidente actualmente apunta a id_tecnico.
-        # En una lógica real, tal vez necesitemos id_taller en AsignacionIncidente, 
-        # o que el primer registro sea al AdministradorTaller.
-        # Por ahora, vinculamos el incidente al taller directamente.
-        
         incidente.id_taller = best_taller.id_taller
+        incidente.id_sucursal = best_branch.id_sucursal
         incidente.estado_incidente = "TALLER_ASIGNADO"
         
         # Historial

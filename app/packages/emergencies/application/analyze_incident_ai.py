@@ -48,6 +48,25 @@ class AnalyzeIncidentAIUseCase:
         last_photo = next((e for e in reversed(incidente.evidencias) if e.evidencia_tipo.upper() == "FOTO"), None)
         last_audio = next((e for e in reversed(incidente.evidencias) if e.evidencia_tipo.upper() == "AUDIO"), None)
         
+        # Si no hay foto ni descripción, saltamos el análisis de IA para continuar con la asignación
+        if not last_photo and not incidente.descripcion:
+            logger.info(f"Omitiendo análisis de IA para {id_incidente} (sin fotos ni descripción).")
+            incidente.resumen_ia = "Emergencia reportada sin evidencias adicionales."
+            incidente.analisis_consolidado = "Revisión manual requerida | Sin evidencias"
+            incidente.estado_incidente = "ANALIZADO"
+            
+            historial = HistorialIncidente(
+                id_incidente=id_incidente,
+                incidente_estado_anterior=estado_original,
+                incidente_estado_nuevo="ANALIZADO",
+                historial_actor="SYSTEM",
+                fecha=None
+            )
+            incidente.historial.append(historial)
+            await self.repo.session.commit()
+            await self.repo.session.refresh(incidente)
+            return incidente
+
         logger.info(f"Seleccionados -> Foto: {last_photo.archivo_url if last_photo else 'None'}, Audio: {last_audio.archivo_url if last_audio else 'None'}")
 
         vision_results = {}

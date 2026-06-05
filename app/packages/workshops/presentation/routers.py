@@ -97,8 +97,10 @@ def _build_incident_response(incident) -> IncidentResponse:
         id_incidente=incident.id_incidente,
         id_vehiculo=incident.id_vehiculo,
         id_taller=incident.id_taller,
+        id_sucursal=incident.id_sucursal,
         id_tecnico=incident.id_tecnico,
         workshop_name=incident.taller.nombre if incident.taller else None,
+        branch_name=incident.branch_name,
         technician_name=incident.tecnico.nombre if incident.tecnico else None,
         technician_phone=incident.tecnico.telefono if incident.tecnico else None,
         descripcion=incident.descripcion,
@@ -120,7 +122,17 @@ def _build_incident_response(incident) -> IncidentResponse:
         vehicle_model=incident.vehiculo.modelo if incident.vehiculo else None,
         vehicle_plate=incident.vehiculo.matricula if incident.vehiculo else None,
         vehicle_color=incident.vehiculo.color if incident.vehiculo else None,
-        vehicle_year=incident.vehiculo.ano if incident.vehiculo else None
+        vehicle_year=incident.vehiculo.ano if incident.vehiculo else None,
+
+        # Campos de verificación segura CU30
+        verification_status=incident.latest_verification.estado_verificacion if incident.latest_verification else None,
+        verification_code=incident.latest_verification.codigo_verificacion if incident.latest_verification else None,
+
+        # Campos de cobro y pago
+        monto_total=incident.pago.monto if incident.pago else None,
+        mano_de_obra=incident.pago.mano_de_obra if incident.pago else None,
+        repuestos=incident.pago.repuestos if incident.pago else None,
+        observaciones=incident.pago.observaciones if incident.pago else None
     )
 
 
@@ -250,8 +262,22 @@ async def update_assignment_status(
 
     # Notificar
     from app.core.notifications import manager
-    await manager.notify_workshop(str(taller.id_taller), {"type": "STATUS_UPDATED", "id": str(incident_id)})
-    await manager.notify_admins({"type": "STATUS_UPDATED", "id": str(incident_id)})
+    from app.core.websocket import manager as ws_manager
+
+    status_event = {
+        "type": "STATUS_UPDATED",
+        "data": {
+            "id_incidente": str(incident_id),
+            "estado_anterior": None,
+            "estado_nuevo": update_in.nuevo_estado,
+            "id_taller": str(taller.id_taller),
+            "id_tecnico": str(incident.id_tecnico) if incident.id_tecnico else None,
+        }
+    }
+    await manager.notify_workshop(str(taller.id_taller), status_event)
+    await manager.notify_admins(status_event)
+    await manager.notify_user(str(incident.id_usuario_cliente), status_event)
+    await ws_manager.broadcast_to_incident(str(incident_id), status_event)
 
     return _build_incident_response(incident)
     
@@ -397,17 +423,29 @@ async def accept_assignment(
         raise NotFoundError("Técnico no encontrado.")
     await validate_resource_branch(tecnico.id_sucursal, selected_branch_id, current_user, db)
         
-    use_case = AcceptRejectIncidentUseCase(
-        IncidentRepository(db), 
-        AssignmentRepository(db), 
-        WorkshopRepository(db)
-    )
+    use_case = AcceptRejectIncidentUseCase(IncidentRepository(db), AssignmentRepository(db))
+    estado_anterior = incident.estado_incidente
     incident = await use_case.accept(taller.id_taller, incident_id, accept_in.id_tecnico, current_user.nombre)
 
     # Notificar
     from app.core.notifications import manager
-    await manager.notify_workshop(str(taller.id_taller), {"type": "ASSIGNMENT_ACCEPTED", "id": str(incident_id)})
-    await manager.notify_admins({"type": "ASSIGNMENT_ACCEPTED", "id": str(incident_id)})
+    from app.core.websocket import manager as ws_manager
+    
+    status_event = {
+        "type": "STATUS_UPDATED",
+        "data": {
+            "id_incidente": str(incident_id),
+            "estado_anterior": estado_anterior,
+            "estado_nuevo": "EN_CAMINO",
+            "id_taller": str(taller.id_taller),
+            "id_tecnico": str(accept_in.id_tecnico),
+        }
+    }
+    
+    await manager.notify_workshop(str(taller.id_taller), status_event)
+    await manager.notify_admins(status_event)
+    await manager.notify_user(str(incident.id_usuario_cliente), status_event)
+    await ws_manager.broadcast_to_incident(str(incident_id), status_event)
 
     return _build_incident_response(incident)
 

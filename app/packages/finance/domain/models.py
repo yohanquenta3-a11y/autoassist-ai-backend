@@ -17,3 +17,7 @@ class Pago(Base):
     monto_comision = Column(Numeric(10, 2), nullable=True)  # Comisión de la plataforma
     estado_pago = Column(String(50), default="PENDIENTE", nullable=False)
     fecha_pago = Column(DateTime, nullable=True)
+    mano_de_obra = Column(Numeric(10, 2), nullable=True)
+    repuestos = Column(Numeric(10, 2), nullable=True)
+    observaciones = Column(String, nullable=True)
+

@@ -28,6 +28,11 @@ class CreateIncidentUseCase:
         if vehicle.id_usuario != current_user.id_usuario:
             raise ForbiddenError("El vehículo no pertenece al usuario autenticado.")
 
+        # Idempotencia: Verificar si ya existe un incidente activo
+        active_incident = await self.incident_repository.get_active_by_user(current_user.id_usuario)
+        if active_incident:
+            return active_incident
+
         # Crear coordenada WKT para PostGIS (solo si se envía ubicación)
         point_wkt = None
         if incident_in.latitud is not None and incident_in.longitud is not None:

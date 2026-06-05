@@ -55,6 +55,8 @@ class TecnicoResponse(BaseModel):
     telefono: Optional[str]
     estado: bool
     temp_password: Optional[str] = None
+    id_sucursal: Optional[uuid.UUID] = None
+    branch_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

@@ -25,6 +25,7 @@ async def test_close_incident_success():
     mock_incident_repo.session = MagicMock()
     mock_incident_repo.session.commit = AsyncMock()
     mock_finance_repo.create_payment = AsyncMock()
+    mock_finance_repo.get_payment_by_incident = AsyncMock(return_value=None)
 
     # Execute
     use_case = CloseIncidentUseCase(mock_finance_repo, mock_incident_repo)

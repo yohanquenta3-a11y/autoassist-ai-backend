@@ -5,7 +5,7 @@ from typing import List, Tuple
 import uuid
 
 from app.packages.assignment.domain.models import AsignacionIncidente
-from app.packages.workshops.domain.models import Taller, CATEGORIA_MECANICA_GENERAL
+from app.packages.workshops.domain.models import Taller, SucursalTaller, CATEGORIA_MECANICA_GENERAL
 
 class AssignmentRepository:
     def __init__(self, session: AsyncSession):
@@ -18,36 +18,59 @@ class AssignmentRepository:
         limit: int = 5,
         required_specialty: str = None,
         exclude_ids: List[uuid.UUID] = None
-    ) -> List[Tuple[Taller, float]]:
+    ) -> List[Tuple[SucursalTaller, float]]:
         """
-        Busca talleres cercanos a un punto geográfico (Geography).
-        Retorna una lista de tuplas (Taller, distancia_metros).
+        Busca sucursales de talleres cercanas a un punto geográfico (Geography).
+        Retorna una lista de tuplas (SucursalTaller, distancia_metros).
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # Distancia en metros para ST_DWithin
         radius_meters = radius_km * 1000
         
         from sqlalchemy.orm import joinedload
-        from app.packages.workshops.domain.models import AdministradorTaller
+        from app.packages.workshops.domain.models import SucursalTaller, Taller, AdministradorTaller
         
-        # Consulta base
+        # 1. Logear advertencias sobre sucursales activas sin ubicación configurada
+        try:
+            no_loc_query = select(SucursalTaller).join(Taller).where(
+                and_(
+                    SucursalTaller.is_active == True,
+                    Taller.is_active == True,
+                    SucursalTaller.ubicacion.is_(None)
+                )
+            )
+            no_loc_res = await self.session.execute(no_loc_query)
+            no_loc_branches = no_loc_res.scalars().all()
+            for branch in no_loc_branches:
+                logger.warning(
+                    f"⚠️ CONFIG: La sucursal '{branch.nombre}' (ID: {branch.id_sucursal}) "
+                    f"del taller '{branch.taller.nombre if branch.taller else branch.id_taller}' está ACTIVA "
+                    f"pero no tiene coordenadas físicas (ubicacion es null). No participará en la asignación."
+                )
+        except Exception as e:
+            logger.error(f"Error al verificar sucursales sin ubicacion: {e}")
+
+        # 2. Búsqueda de sucursales cercanas con ubicacion válida
         query = select(
-            Taller, 
-            ST_Distance(Taller.ubicacion, point).label("distance")
+            SucursalTaller, 
+            ST_Distance(SucursalTaller.ubicacion, point).label("distance")
+        ).join(
+            Taller, SucursalTaller.id_taller == Taller.id_taller
         ).options(
-            joinedload(Taller.administradores).joinedload(AdministradorTaller.usuario)
+            joinedload(SucursalTaller.taller).joinedload(Taller.administradores).joinedload(AdministradorTaller.usuario)
         ).where(
             and_(
+                SucursalTaller.is_active == True,
                 Taller.is_active == True,
-                ST_DWithin(Taller.ubicacion, point, radius_meters)
+                SucursalTaller.ubicacion.is_not(None),
+                ST_DWithin(SucursalTaller.ubicacion, point, radius_meters)
             )
         )
         
         if exclude_ids:
-            query = query.where(Taller.id_taller.not_in(exclude_ids))
-        
-        # Filtro de especialidad (Si se requiere)
-        # En una versión avanzada, uniríamos con TallerCategoriaServicio
-        # Por ahora, filtramos por talleres activos.
+            query = query.where(SucursalTaller.id_taller.notin_(exclude_ids))
         
         query = query.order_by("distance").limit(limit)
         
@@ -64,5 +87,13 @@ class AssignmentRepository:
     async def get_by_id(self, id_asignacion: uuid.UUID) -> AsignacionIncidente:
         result = await self.session.execute(
             select(AsignacionIncidente).where(AsignacionIncidente.id_asignacion == id_asignacion)
+        )
+        return result.scalars().first()
+
+    async def get_by_incident(self, id_incidente: uuid.UUID) -> AsignacionIncidente:
+        result = await self.session.execute(
+            select(AsignacionIncidente)
+            .where(AsignacionIncidente.id_incidente == id_incidente)
+            .order_by(AsignacionIncidente.fecha_asignacion.desc())
         )
         return result.scalars().first()
