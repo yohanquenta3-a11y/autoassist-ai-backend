@@ -28,6 +28,8 @@ import app.packages.emergencies.domain.models        # Incidente, EvidenciaIncid
 import app.packages.assignment.domain.models         # AsignacionIncidente
 # Finance
 import app.packages.finance.domain.models            # Pago
+# Scheduling
+import app.packages.scheduling.domain.models         # Cita
 
 target_metadata = Base.metadata
 

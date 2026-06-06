@@ -547,7 +547,7 @@ async def post_incident_tracking(
     eta_minutos = None
     polyline_ruta = None
 
-    if incident.ubicacion_emergencia is not None:
+    if incident.estado_incidente == "EN_CAMINO" and incident.ubicacion_emergencia is not None:
         try:
             dest_lat = to_shape(incident.ubicacion_emergencia).y
             dest_lng = to_shape(incident.ubicacion_emergencia).x
@@ -669,7 +669,7 @@ async def get_latest_tracking(
     # 4. Calcular ETA y polyline si es necesario
     eta_minutos = None
     polyline_ruta = None
-    if incident.ubicacion_emergencia is not None and latitud is not None and longitud is not None:
+    if incident.estado_incidente == "EN_CAMINO" and incident.ubicacion_emergencia is not None and latitud is not None and longitud is not None:
         try:
             dest_lat = to_shape(incident.ubicacion_emergencia).y
             dest_lng = to_shape(incident.ubicacion_emergencia).x

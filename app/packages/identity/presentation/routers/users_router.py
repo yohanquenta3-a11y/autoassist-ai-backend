@@ -4,7 +4,7 @@ from typing import List
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_active_user
-from app.packages.identity.domain.models import Usuario, ROL_SUPERADMIN, ROL_ADMIN_TALLER
+from app.packages.identity.domain.models import Usuario, ROL_SUPERADMIN, ROL_ADMIN_TALLER, ROL_CLIENTE
 from app.packages.identity.infrastructure.repositories import UserRepository
 from app.packages.identity.presentation.schemas.auth_schemas import UserResponse, UserAdminCreate
 from app.packages.identity.presentation.schemas.auth_schemas import UserResponse, UserAdminCreate
@@ -132,6 +132,31 @@ async def list_my_vehicles(
 ):
     """Consultar Vehículos: Retorna toda la flota del cliente."""
     return await repo.get_vehicles_by_user(current_user.id_usuario)
+
+@users_router.get("/{user_id}/vehicles", response_model=List[VehicleResponse])
+async def list_user_vehicles(
+    user_id: uuid.UUID,
+    current_user: Usuario = Depends(get_current_active_user),
+    repo: UserRepository = Depends(get_user_repository),
+    workshop_repo: WorkshopRepository = Depends(get_workshop_repository)
+):
+    """(Admin) Consulta los vehÃ­culos de un cliente para crear citas directas."""
+    if current_user.rol_nombre not in [ROL_SUPERADMIN, ROL_ADMIN_TALLER]:
+        raise ForbiddenError("No tienes permisos para consultar vehÃ­culos de otros usuarios.")
+
+    target_user = await repo.get_by_id(user_id)
+    if not target_user or target_user.rol_nombre != ROL_CLIENTE:
+        raise NotFoundError("Cliente no encontrado.")
+
+    if current_user.rol_nombre == ROL_ADMIN_TALLER:
+        taller = await workshop_repo.get_by_admin(current_user.id_usuario)
+        if not taller:
+            raise ForbiddenError("No tienes un taller vinculado para consultar vehÃ­culos.")
+        relation = await workshop_repo.get_user_taller_by_user(user_id)
+        if not relation or relation.id_taller != taller.id_taller:
+            raise ForbiddenError("No puedes consultar vehÃ­culos de clientes de otro taller.")
+
+    return await repo.get_vehicles_by_user(user_id)
 
 @users_router.put("/me/vehicles/{vehicle_id}", response_model=VehicleResponse)
 async def update_my_vehicle(
