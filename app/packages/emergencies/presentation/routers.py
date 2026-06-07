@@ -10,8 +10,9 @@ from app.packages.identity.domain.models import Usuario
 from app.packages.identity.infrastructure.repositories import UserRepository
 from app.packages.emergencies.infrastructure.repositories import IncidentRepository
 from app.packages.workshops.dependencies import get_selected_branch_id
-from app.packages.emergencies.presentation.schemas import IncidentCreate, IncidentResponse, EvidenceResponse, TrackingRequest, IncidentStatusUpdate, IncidentHistoryResponse, IncidentProcessRequest, TechnicianVerificationRequest, ManualOverrideRequest
+from app.packages.emergencies.presentation.schemas import IncidentCreate, OfflineIncidentSyncRequest, OfflineIncidentSyncResponse, IncidentResponse, EvidenceResponse, TrackingRequest, IncidentStatusUpdate, IncidentHistoryResponse, IncidentProcessRequest, TechnicianVerificationRequest, ManualOverrideRequest
 from app.packages.emergencies.application.create_incident import CreateIncidentUseCase
+from app.packages.emergencies.application.sync_offline_incident import SyncOfflineIncidentUseCase
 from app.packages.emergencies.application.upload_evidence import UploadEvidenceUseCase
 from app.packages.emergencies.application.analyze_incident_ai import AnalyzeIncidentAIUseCase
 from app.packages.emergencies.application.tasks import run_full_incident_pipeline, run_full_incident_pipeline_task
@@ -67,6 +68,9 @@ def _build_incident_response(incident, current_user: Optional[Usuario] = None) -
         estado_incidente=incident.estado_incidente,
         prioridad_incidente=incident.prioridad_incidente,
         origen=incident.origen,
+        identificador_local=incident.identificador_local,
+        origen_registro=incident.origen_registro,
+        fecha_sincronizacion=incident.fecha_sincronizacion.isoformat() if incident.fecha_sincronizacion else None,
         id_cotizacion_origen=incident.id_cotizacion_origen,
         transcripcion_audio=incident.transcripcion_audio,
         resumen_ia=incident.resumen_ia,
@@ -97,6 +101,11 @@ def _build_incident_response(incident, current_user: Optional[Usuario] = None) -
         observaciones=incident.pago.observaciones if incident.pago else None
     )
 
+
+
+@router.get("/ping")
+async def ping():
+    return {"status": "ok"}
 
 
 @router.get("/me/active", response_model=Optional[IncidentResponse])
@@ -197,6 +206,55 @@ async def report_incident(
     await manager.notify_admins({"type": "NEW_INCIDENT", "id": str(incident.id_incidente)})
     
     return _build_incident_response(incident, current_user)
+
+
+@router.post("/offline/sync", response_model=OfflineIncidentSyncResponse, status_code=status.HTTP_202_ACCEPTED)
+async def sync_offline_incident(
+    payload: OfflineIncidentSyncRequest,
+    background_tasks: BackgroundTasks,
+    current_user: Usuario = Depends(get_current_active_user),
+    incident_repo: IncidentRepository = Depends(get_incident_repository),
+    user_repo: UserRepository = Depends(get_user_repository),
+):
+    use_case = SyncOfflineIncidentUseCase(incident_repo, user_repo)
+    incident, duplicated = await use_case.execute(current_user, payload)
+
+    if not duplicated:
+        from app.core.notifications import manager
+
+        await manager.notify_admins({"type": "NEW_INCIDENT", "id": str(incident.id_incidente)})
+
+        from app.core.config import settings
+        import logging
+
+        logger = logging.getLogger(__name__)
+        if is_redis_available(settings.REDIS_URL):
+            try:
+                run_full_incident_pipeline_task.delay(str(incident.id_incidente))
+                logger.info(
+                    "Offline sync pipeline task queued on Celery for incident %s",
+                    incident.id_incidente,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to queue offline sync on Celery (%s). Falling back to FastAPI BackgroundTasks.",
+                    exc,
+                )
+                background_tasks.add_task(run_full_incident_pipeline, incident.id_incidente)
+        else:
+            logger.info(
+                "Redis is not available. Falling back to FastAPI BackgroundTasks for offline sync incident %s",
+                incident.id_incidente,
+            )
+            background_tasks.add_task(run_full_incident_pipeline, incident.id_incidente)
+
+    return OfflineIncidentSyncResponse(
+        synced=True,
+        duplicated=duplicated,
+        id_incidente=incident.id_incidente,
+        estado_incidente=incident.estado_incidente,
+        identificador_local=payload.identificador_local,
+    )
 
 
 @router.post("/{incident_id}/evidence", response_model=EvidenceResponse, status_code=status.HTTP_201_CREATED)

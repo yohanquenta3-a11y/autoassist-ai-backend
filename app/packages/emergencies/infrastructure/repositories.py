@@ -38,6 +38,27 @@ class IncidentRepository:
         )
         return result.scalars().first()
 
+    async def get_by_local_identifier(
+        self,
+        user_id: uuid.UUID,
+        identificador_local: str,
+    ) -> Optional[Incidente]:
+        result = await self.session.execute(
+            select(Incidente)
+            .options(
+                joinedload(Incidente.vehiculo).joinedload(Vehiculo.propietario),
+                joinedload(Incidente.taller),
+                joinedload(Incidente.tecnico),
+                selectinload(Incidente.evidencias),
+                selectinload(Incidente.historial),
+                selectinload(Incidente.verificaciones),
+                selectinload(Incidente.pago)
+            )
+            .where(Incidente.id_usuario_cliente == user_id)
+            .where(Incidente.identificador_local == identificador_local)
+        )
+        return result.scalars().first()
+
     async def update_incident(self, incidente: Incidente) -> Incidente:
         self.session.add(incidente)
         await self.session.commit()

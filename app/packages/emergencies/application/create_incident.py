@@ -46,6 +46,7 @@ class CreateIncidentUseCase:
             ubicacion_emergencia=point_wkt,
             estado_incidente="PENDIENTE",
             prioridad_incidente=incident_in.prioridad or "MEDIA",
+            origen_registro="ONLINE",
         )
 
         incidente_creado = await self.incident_repository.create_incident(new_incident)

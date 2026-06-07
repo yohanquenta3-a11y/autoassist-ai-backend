@@ -31,6 +31,9 @@ class Incidente(Base):
     estado_incidente = Column(String(50), default="PENDIENTE", nullable=False)
     prioridad_incidente = Column(String(20), default="MEDIA", nullable=False)
     origen = Column(String(50), nullable=True)
+    identificador_local = Column(String(120), nullable=True)
+    origen_registro = Column(String(50), default="ONLINE", nullable=False)
+    fecha_sincronizacion = Column(DateTime, nullable=True)
     id_cotizacion_origen = Column(UUID(as_uuid=True), ForeignKey("cotizacion.id_cotizacion"), nullable=True)
 
     # Campos enriquecidos por la IA (Fase de procesamiento inteligente)

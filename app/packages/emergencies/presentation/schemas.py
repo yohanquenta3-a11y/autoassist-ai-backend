@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from decimal import Decimal
 import uuid
+from datetime import datetime
 
 
 # --- Requests ---
@@ -15,7 +16,16 @@ class IncidentCreate(BaseModel):
     prioridad: Optional[str] = Field("MEDIA", pattern="^(BAJA|MEDIA|ALTA|CRITICA)$")
 
 
-from datetime import datetime
+class OfflineIncidentSyncRequest(BaseModel):
+    identificador_local: str = Field(..., min_length=8, max_length=120)
+    id_vehiculo: uuid.UUID
+    descripcion: Optional[str] = Field(None, min_length=3)
+    telefono: Optional[str] = Field(None, max_length=20)
+    latitud: float = Field(..., ge=-90, le=90)
+    longitud: float = Field(..., ge=-180, le=180)
+    prioridad: Optional[str] = Field("CRITICA", pattern="^(BAJA|MEDIA|ALTA|CRITICA)$")
+    ubicacion_referencial: Optional[str] = Field(None, max_length=255)
+    fecha_registro_local: Optional[datetime] = None
 
 # --- Responses ---
 
@@ -60,6 +70,9 @@ class IncidentResponse(BaseModel):
     estado_incidente: str
     prioridad_incidente: str
     origen: Optional[str] = None
+    identificador_local: Optional[str] = None
+    origen_registro: Optional[str] = None
+    fecha_sincronizacion: Optional[str] = None
     id_cotizacion_origen: Optional[uuid.UUID] = None
     transcripcion_audio: Optional[str]
     resumen_ia: Optional[str]
@@ -86,6 +99,14 @@ class IncidentResponse(BaseModel):
     observaciones: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class OfflineIncidentSyncResponse(BaseModel):
+    synced: bool
+    duplicated: bool
+    id_incidente: uuid.UUID
+    estado_incidente: str
+    identificador_local: str
 
 
 
