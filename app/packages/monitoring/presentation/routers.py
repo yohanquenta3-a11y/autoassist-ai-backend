@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, status
+from datetime import datetime, time
+from typing import Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 
@@ -6,11 +10,33 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_active_user
 from app.packages.identity.domain.models import Usuario
 from app.packages.emergencies.infrastructure.repositories import IncidentRepository
-from app.packages.workshops.infrastructure.repositories import WorkshopRepository
+from app.packages.monitoring.application.operational_metrics import (
+    build_operational_dashboard,
+    build_sla_alerts,
+    resolve_operational_scope,
+)
+from app.packages.monitoring.infrastructure.operational_metrics_repository import OperationalMetricsRepository
+from app.packages.monitoring.presentation.schemas import (
+    GlobalStatsResponse,
+    OperationalDashboardResponse,
+    SlaAlertsResponse,
+)
+from app.packages.workshops.dependencies import get_selected_branch_id
 from app.packages.emergencies.presentation.schemas import IncidentResponse
-from app.packages.monitoring.presentation.schemas import GlobalStatsResponse
 
 router = APIRouter()
+
+
+def _parse_date_start(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    return datetime.combine(datetime.fromisoformat(value).date(), time.min)
+
+
+def _parse_date_end(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    return datetime.combine(datetime.fromisoformat(value).date(), time.max)
 
 @router.get("/{incident_id}/tracking", response_model=IncidentResponse)
 async def track_incident(
@@ -69,3 +95,69 @@ async def get_global_stats(
         "total_comisiones": total_comisiones,
         "emergencias_activas": emergencias_activas
     }
+
+
+@router.get("/operational/dashboard", response_model=OperationalDashboardResponse)
+async def get_operational_dashboard(
+    current_user: Usuario = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+    selected_branch_id: Optional[uuid.UUID] = Depends(get_selected_branch_id),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    id_taller: Optional[UUID] = Query(None),
+    id_sucursal: Optional[UUID] = Query(None),
+    estado: Optional[str] = Query(None),
+    prioridad: Optional[str] = Query(None),
+    origen: Optional[str] = Query(None),
+):
+    repository = OperationalMetricsRepository(db)
+    scope = await resolve_operational_scope(
+        repository=repository,
+        current_user=current_user,
+        requested_taller_id=id_taller,
+        selected_branch_id=selected_branch_id,
+        requested_branch_id=id_sucursal,
+    )
+    return await build_operational_dashboard(
+        repository=repository,
+        scope=scope,
+        date_from=_parse_date_start(date_from),
+        date_to=_parse_date_end(date_to),
+        estado=estado,
+        prioridad=prioridad,
+        origen=origen,
+    )
+
+
+@router.get("/operational/sla-alerts", response_model=SlaAlertsResponse)
+async def get_operational_sla_alerts(
+    current_user: Usuario = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+    selected_branch_id: Optional[uuid.UUID] = Depends(get_selected_branch_id),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    id_taller: Optional[UUID] = Query(None),
+    id_sucursal: Optional[UUID] = Query(None),
+    prioridad: Optional[str] = Query(None),
+    tipo_alerta: Optional[str] = Query(None),
+    sla_status: Optional[str] = Query(None),
+    estado_incidente: Optional[str] = Query(None),
+):
+    repository = OperationalMetricsRepository(db)
+    scope = await resolve_operational_scope(
+        repository=repository,
+        current_user=current_user,
+        requested_taller_id=id_taller,
+        selected_branch_id=selected_branch_id,
+        requested_branch_id=id_sucursal,
+    )
+    return await build_sla_alerts(
+        repository=repository,
+        scope=scope,
+        date_from=_parse_date_start(date_from),
+        date_to=_parse_date_end(date_to),
+        prioridad=prioridad,
+        tipo_alerta=tipo_alerta,
+        sla_status=sla_status,
+        estado_incidente=estado_incidente,
+    )

@@ -530,6 +530,26 @@ async def list_my_branches(
     branches = await repo.get_branches_by_workshop(taller.id_taller)
     return [_build_sucursal_response(b) for b in branches]
 
+
+@router.get("/{id_taller}/branches", response_model=list[SucursalResponse])
+async def list_branches_by_workshop(
+    id_taller: uuid.UUID,
+    current_user: Usuario = Depends(get_current_active_user),
+    repo: WorkshopRepository = Depends(get_workshop_repository),
+):
+    """(SuperAdmin) Listar sucursales de un taller especifico."""
+    from app.packages.identity.domain.models import ROL_SUPERADMIN
+
+    if current_user.rol_nombre != ROL_SUPERADMIN:
+        raise ForbiddenError("Solo el SuperAdmin puede consultar sucursales de cualquier taller.")
+
+    taller = await repo.get_by_id(id_taller)
+    if not taller:
+        raise NotFoundError("Taller no encontrado.")
+
+    branches = await repo.get_branches_by_workshop(id_taller)
+    return [_build_sucursal_response(branch) for branch in branches]
+
 @router.post("/me/branches", response_model=SucursalResponse, status_code=status.HTTP_201_CREATED)
 async def create_my_branch(
     sucursal_in: SucursalCreate,
