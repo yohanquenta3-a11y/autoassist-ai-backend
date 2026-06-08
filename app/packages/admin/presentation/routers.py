@@ -68,6 +68,18 @@ async def list_workshops(
         _handle_service_errors(exc)
 
 
+@router.get("/talleres/{id_taller}", response_model=TallerResponse)
+async def get_workshop_detail(
+    id_taller: uuid.UUID,
+    current_user: Usuario = Depends(get_current_active_user),
+    service: TenantManagementService = Depends(get_admin_service)
+):
+    try:
+        return await service.consultar_taller_tenant(current_user, id_taller)
+    except Exception as exc:
+        _handle_service_errors(exc)
+
+
 @router.post("/talleres", response_model=TallerResponse)
 async def create_workshop(
     payload: TallerCreate,

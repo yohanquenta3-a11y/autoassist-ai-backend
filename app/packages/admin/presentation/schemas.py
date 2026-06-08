@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -50,7 +51,7 @@ class IncidentResponse(BaseModel):
     id_tecnico: Optional[uuid.UUID]
     estado_incidente: str
     prioridad_incidente: str
-    fecha_reporte: Optional[str]
+    fecha_reporte: Optional[datetime]
     descripcion: Optional[str]
 
     model_config = ConfigDict(from_attributes=True)
@@ -71,7 +72,7 @@ class BitacoraResponse(BaseModel):
     id_sucursal_contexto: Optional[uuid.UUID]
     accion: str
     descripcion: Optional[str]
-    fecha_hora: Optional[str]
+    fecha_hora: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -28,6 +28,13 @@ class TenantManagementService:
         await self.validar_permiso_global(current_user)
         return await self.repo.get_all_workshops()
 
+    async def consultar_taller_tenant(self, current_user: Usuario, taller_id: uuid.UUID) -> Taller:
+        await self.validar_permiso_global(current_user)
+        taller = await self.repo.get_workshop(taller_id)
+        if not taller:
+            raise NotFoundError("Taller no encontrado.")
+        return taller
+
     async def registrar_actualizar_taller(
         self,
         current_user: Usuario,
