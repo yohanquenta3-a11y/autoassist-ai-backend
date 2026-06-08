@@ -33,6 +33,7 @@ credentials.json
 # Bases de Datos locales (SQLite)
 *.sqlite3
 *.db
+*.dump
 
 # Caché y Testing
 .cache/
