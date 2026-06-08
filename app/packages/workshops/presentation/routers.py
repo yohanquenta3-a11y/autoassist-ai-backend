@@ -197,12 +197,18 @@ async def update_my_workshop(
 @router.get("/{taller_id}", response_model=TallerResponse)
 async def get_workshop(
     taller_id: uuid.UUID,
+    current_user: Usuario = Depends(get_current_active_user),
     repo: WorkshopRepository = Depends(get_workshop_repository),
 ):
     """Consultar un taller por su ID."""
     taller = await repo.get_by_id(taller_id)
     if not taller:
         raise NotFoundError("Taller no encontrado.")
+    from app.packages.identity.domain.models import ROL_SUPERADMIN
+    if current_user.rol_nombre != ROL_SUPERADMIN:
+        user_taller = await repo.get_by_admin(current_user.id_usuario)
+        if not user_taller or user_taller.id_taller != taller_id:
+            raise ForbiddenError("No puedes acceder a un taller distinto al tuyo.")
     return _build_taller_response(taller)
 
 

@@ -3,6 +3,7 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 from typing import Optional, List
 import uuid
+from sqlalchemy.orm import selectinload
 
 from app.packages.identity.domain.models import Usuario, Vehiculo, Rol
 
@@ -23,14 +24,28 @@ class UserRepository:
     # --- Usuario ---
 
     async def get_by_email(self, email: str) -> Optional[Usuario]:
-        result = await self.session.execute(select(Usuario).where(Usuario.correo == email))
+        result = await self.session.execute(
+            select(Usuario)
+            .options(
+                selectinload(Usuario.rol_obj),
+                selectinload(Usuario.vehiculos),
+            )
+            .where(Usuario.correo == email)
+        )
         user = result.scalars().first()
         if user:
             user.rol_contexto = await self._get_rol_contexto(user)
         return user
 
     async def get_by_id(self, user_id: uuid.UUID) -> Optional[Usuario]:
-        result = await self.session.execute(select(Usuario).where(Usuario.id_usuario == user_id))
+        result = await self.session.execute(
+            select(Usuario)
+            .options(
+                selectinload(Usuario.rol_obj),
+                selectinload(Usuario.vehiculos),
+            )
+            .where(Usuario.id_usuario == user_id)
+        )
         user = result.scalars().first()
         if user:
             user.rol_contexto = await self._get_rol_contexto(user)
@@ -54,7 +69,10 @@ class UserRepository:
             
         # 2. Branch Admin
         branch_result = await self.session.execute(
-            select(UsuarioTaller).where(UsuarioTaller.id_usuario == user.id_usuario)
+            select(UsuarioTaller).where(
+                UsuarioTaller.id_usuario == user.id_usuario,
+                UsuarioTaller.estado == True
+            )
         )
         branch_link = branch_result.scalars().first()
         if branch_link:
@@ -65,7 +83,10 @@ class UserRepository:
         # 3. Tecnico
         if user.rol_nombre == "tecnico":
             tec_result = await self.session.execute(
-                select(Tecnico).where(Tecnico.id_usuario == user.id_usuario)
+                select(Tecnico).where(
+                    Tecnico.id_usuario == user.id_usuario,
+                    Tecnico.estado == True
+                )
             )
             tec = tec_result.scalars().first()
             if tec:
@@ -161,11 +182,11 @@ class UserRepository:
             is_admin = exists().where(AdministradorTaller.id_usuario == Usuario.id_usuario).where(AdministradorTaller.id_taller == workshop_id)
             
             if branch_id is not None:
-                is_member = exists().where(UsuarioTaller.id_usuario == Usuario.id_usuario).where(UsuarioTaller.id_taller == workshop_id).where(UsuarioTaller.id_sucursal == branch_id)
-                is_tecnico = exists().where(Tecnico.id_usuario == Usuario.id_usuario).where(Tecnico.id_taller == workshop_id).where(Tecnico.id_sucursal == branch_id)
+                is_member = exists().where(UsuarioTaller.id_usuario == Usuario.id_usuario).where(UsuarioTaller.id_taller == workshop_id).where(UsuarioTaller.id_sucursal == branch_id).where(UsuarioTaller.estado == True)
+                is_tecnico = exists().where(Tecnico.id_usuario == Usuario.id_usuario).where(Tecnico.id_taller == workshop_id).where(Tecnico.id_sucursal == branch_id).where(Tecnico.estado == True)
             else:
-                is_member = exists().where(UsuarioTaller.id_usuario == Usuario.id_usuario).where(UsuarioTaller.id_taller == workshop_id)
-                is_tecnico = exists().where(Tecnico.id_usuario == Usuario.id_usuario).where(Tecnico.id_taller == workshop_id)
+                is_member = exists().where(UsuarioTaller.id_usuario == Usuario.id_usuario).where(UsuarioTaller.id_taller == workshop_id).where(UsuarioTaller.estado == True)
+                is_tecnico = exists().where(Tecnico.id_usuario == Usuario.id_usuario).where(Tecnico.id_taller == workshop_id).where(Tecnico.estado == True)
                 
             is_cliente = exists().where(Vehiculo.id_usuario == Usuario.id_usuario).where(Incidente.id_vehiculo == Vehiculo.id_vehiculo).where(Incidente.id_taller == workshop_id)
             query = query.where(or_(is_admin, is_member, is_tecnico, is_cliente))
