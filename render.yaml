@@ -1,0 +1,52 @@
+services:
+  - type: web
+    name: autoassist-ai-backend
+    runtime: python
+    plan: free
+    healthCheckPath: /
+    buildCommand: pip install -r requirements.txt
+    preDeployCommand: python -m alembic upgrade head
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PROJECT_NAME
+        value: AutoAssist AI Backend
+      - key: VERSION
+        value: 1.0.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: DATABASE_URL
+        sync: false
+      - key: BACKEND_CORS_ORIGINS
+        sync: false
+      - key: MATCH_RADIUS_KM
+        value: 15.0
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_PATH
+        value: /etc/secrets/firebase-admin.json
+      - key: GOOGLE_MAPS_BACKEND_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION_NAME
+        value: us-east-1
+      - key: AWS_BUCKET_NAME
+        sync: false
+      - key: ROBOFLOW_API_URL
+        sync: false
+      - key: ROBOFLOW_API_KEY
+        sync: false
+      - key: ROBOFLOW_WORKSPACE
+        sync: false
+      - key: ROBOFLOW_WORKFLOW_ID
+        sync: false
