@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.api import api_router
 from app.core.config import settings
 from app.core.exceptions import setup_exception_handlers
@@ -15,13 +16,16 @@ app = FastAPI(
     version=settings.VERSION
 )
 
-# Configuración de CORS
-
+# Middleware de auditoría
 app.add_middleware(AuditMiddleware)
 
+# Configuración de CORS
+# Permite localhost y cualquier subdominio de Vercel, por ejemplo:
+# https://autoassist-ai-frontend-xl4v.vercel.app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS or ["*"],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,6 +40,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 from app.packages.identity.presentation.websocket import router as ws_router
 app.include_router(ws_router)
+
 
 @app.get("/")
 def read_root():
