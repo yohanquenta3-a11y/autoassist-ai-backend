@@ -1,0 +1,38 @@
+# Credenciales demo multi-tenant
+
+Fecha: 2026-06-09
+
+## Usuarios
+
+| Nombre | Correo | Rol | Contexto | Taller | Sucursal | Password |
+| --- | --- | --- | --- | --- | --- | --- |
+| Admin Central | superadmin@autoassist.global | superadmin | global |  |  | `SuperAdmin2026!` |
+| Pedro Suarez | pedro.suarez@gmail.com | cliente | global |  |  | `ClientePedro2026!` |
+| Maria Gutierrez | maria.gutierrez@gmail.com | cliente | global |  |  | `ClienteMaria2026!` |
+| Jose Lopez | jose.lopez@gmail.com | cliente | global |  |  | `ClienteJose2026!` |
+| Carla Rojas | carla.rojas@gmail.com | cliente | global |  |  | `ClienteCarla2026!` |
+| Bruno Perez | bruno.perez@gmail.com | cliente | global |  |  | `ClienteBruno2026!` |
+| Lucia Vargas | lucia.vargas@gmail.com | cliente | global |  |  | `ClienteLucia2026!` |
+| Andres Molina | andres.molina@gmail.com | cliente | global |  |  | `ClienteAndres2026!` |
+| Sofia Cuiza | sofia.cuiza@gmail.com | cliente | global |  |  | `ClienteSofia2026!` |
+| Rodrigo Salvatierra | owner@torquenorte.bo | admin_taller | owner | Red Torque Norte |  | `OwnerTorque2026!` |
+| Daniela Roca | equipetrol.admin@torquenorte.bo | admin_taller | admin_sucursal | Red Torque Norte | Equipetrol | `AdminTorqueEq2026!` |
+| Carlos Aguilar | c.aguilar@torquenorte.bo | tecnico | tecnico | Red Torque Norte | Equipetrol | `TecTorqueEq12026!` |
+| Joaquin Almos | j.almos@torquenorte.bo | tecnico | tecnico | Red Torque Norte | Equipetrol | `TecTorqueEq22026!` |
+| Paola Cuellar | urubo.admin@torquenorte.bo | admin_taller | admin_sucursal | Red Torque Norte | Urubo | `AdminTorqueUr2026!` |
+| Sebastian Smit | s.smit@torquenorte.bo | tecnico | tecnico | Red Torque Norte | Urubo | `TecTorqueUr12026!` |
+| Leonardo Carrasco | l.carrasco@torquenorte.bo | tecnico | tecnico | Red Torque Norte | Urubo | `TecTorqueUr22026!` |
+| Valeria Montero | owner@andinamotor.bo | admin_taller | owner | Andina Motor Care |  | `OwnerAndina2026!` |
+| Alejandro Sejas | santosdumont.admin@andinamotor.bo | admin_taller | admin_sucursal | Andina Motor Care | Santos Dumont | `AdminAndinaSd2026!` |
+| Yohan Mamani | y.mamani@andinamotor.bo | tecnico | tecnico | Andina Motor Care | Santos Dumont | `TecAndinaSd12026!` |
+| Ruben Mendez | r.mendez@andinamotor.bo | tecnico | tecnico | Andina Motor Care | Santos Dumont | `TecAndinaSd22026!` |
+| Lucia Pedraza | plan3000.admin@andinamotor.bo | admin_taller | admin_sucursal | Andina Motor Care | Plan 3000 | `AdminAndinaP32026!` |
+| Mario Vaca | m.vaca@andinamotor.bo | tecnico | tecnico | Andina Motor Care | Plan 3000 | `TecAndinaP312026!` |
+| Hector Suazo | h.suazo@andinamotor.bo | tecnico | tecnico | Andina Motor Care | Plan 3000 | `TecAndinaP322026!` |
+| Marcelo Paniagua | owner@rutasur.bo | admin_taller | owner | Ruta Sur Service |  | `OwnerRutaSur2026!` |
+| Nadia Lozada | cristo.admin@rutasur.bo | admin_taller | admin_sucursal | Ruta Sur Service | Cristo Redentor | `AdminRutaCr2026!` |
+| Patricio Paz | p.paz@rutasur.bo | tecnico | tecnico | Ruta Sur Service | Cristo Redentor | `TecRutaCr12026!` |
+| Erwin Torrico | e.torrico@rutasur.bo | tecnico | tecnico | Ruta Sur Service | Cristo Redentor | `TecRutaCr22026!` |
+| Javier Rios | villa1ro.admin@rutasur.bo | admin_taller | admin_sucursal | Ruta Sur Service | Villa 1ro de Mayo | `AdminRutaVm2026!` |
+| Oscar Hurtado | o.hurtado@rutasur.bo | tecnico | tecnico | Ruta Sur Service | Villa 1ro de Mayo | `TecRutaVm12026!` |
+| Brayan Ruiz | b.ruiz@rutasur.bo | tecnico | tecnico | Ruta Sur Service | Villa 1ro de Mayo | `TecRutaVm22026!` |

@@ -127,6 +127,44 @@ def _vehicle_label(incident: Incidente) -> Optional[str]:
     return compact or "Vehiculo sin detalle"
 
 
+def _normalize_text(value: Optional[str]) -> str:
+    return (value or "").strip().lower()
+
+
+def _infer_incident_type(incident: Incidente) -> str:
+    source_text = " ".join(
+        filter(
+            None,
+            [
+                _normalize_text(incident.descripcion),
+                _normalize_text(incident.resumen_ia),
+                _normalize_text(incident.analisis_consolidado),
+                _normalize_text(incident.origen),
+            ],
+        )
+    )
+
+    keyword_groups = [
+        ("Pinchazo / llanta", ("pinch", "llanta", "neumatic", "rueda", "revent")),
+        ("Bateria / energia", ("bateria", "arranque", "corriente", "alternador", "electrico", "electrico")),
+        ("Motor / mecanica", ("motor", "recalent", "aceite", "humo", "mecan", "radiador", "freno")),
+        ("Combustible", ("combustible", "gasolina", "diesel", "nafta", "sin fuel", "sin gasolina")),
+        ("Accidente", ("choque", "colision", "accidente", "impacto")),
+        ("Grua / remolque", ("grua", "remol", "arrastre", "traslado")),
+        ("Cerrajeria", ("llave", "cerra", "puerta", "candado", "cerradura")),
+    ]
+
+    for label, keywords in keyword_groups:
+        if any(keyword in source_text for keyword in keywords):
+            return label
+
+    if incident.origen_registro == "OFFLINE_MOVIL":
+        return "Reporte offline"
+    if incident.origen == "COTIZACION":
+        return "Cotizacion convertida"
+    return "Otros"
+
+
 def _first_history_date(history: list[HistorialIncidente], states: set[str]) -> Optional[datetime]:
     ordered = sorted(history, key=lambda item: item.fecha or datetime.min)
     for item in ordered:
@@ -331,6 +369,7 @@ async def build_operational_dashboard(
     status_counter = Counter()
     priority_counter = Counter()
     origin_counter = Counter()
+    type_counter = Counter()
     branch_counter = Counter()
     workshop_counter = Counter()
     performance_buckets: dict[str, dict[str, float | int]] = defaultdict(
@@ -368,6 +407,7 @@ async def build_operational_dashboard(
         status_counter[incident.estado_incidente] += 1
         priority_counter[incident.prioridad_incidente] += 1
         origin_counter[incident.origen or incident.origen_registro or "SOS"] += 1
+        type_counter[_infer_incident_type(incident)] += 1
         branch_counter[_branch_name(incident)] += 1
         workshop_counter[_workshop_name(incident)] += 1
 
@@ -520,6 +560,7 @@ async def build_operational_dashboard(
             "incidentes_por_estado": [{"label": key, "value": value} for key, value in status_counter.most_common()],
             "incidentes_por_prioridad": [{"label": key, "value": value} for key, value in priority_counter.most_common()],
             "incidentes_por_origen": [{"label": key, "value": value} for key, value in origin_counter.most_common()],
+            "incidentes_por_tipo": [{"label": key, "value": value} for key, value in type_counter.most_common()],
             "incidentes_por_sucursal": [{"label": key, "value": value} for key, value in branch_counter.most_common()],
             "incidentes_por_taller": [{"label": key, "value": value} for key, value in workshop_counter.most_common()],
         },

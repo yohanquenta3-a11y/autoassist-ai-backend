@@ -83,6 +83,7 @@ class OperationalDashboardSeriesResponse(BaseModel):
     incidentes_por_estado: list[LabelValueResponse]
     incidentes_por_prioridad: list[LabelValueResponse]
     incidentes_por_origen: list[LabelValueResponse]
+    incidentes_por_tipo: list[LabelValueResponse]
     incidentes_por_sucursal: list[LabelValueResponse]
     incidentes_por_taller: list[LabelValueResponse]
 
