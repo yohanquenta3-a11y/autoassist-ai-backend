@@ -44,7 +44,6 @@ class Usuario(Base):
     bitacoras = relationship("Bitacora", back_populates="usuario", foreign_keys="[Bitacora.id_usuario_actor]")
     notificaciones = relationship("Notificacion", back_populates="usuario")
 
-    # Dynamic fields for tenant and role context (not database columns)
     id_taller = None
     id_sucursal = None
     rol_contexto = None

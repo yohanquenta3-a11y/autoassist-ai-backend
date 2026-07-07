@@ -19,6 +19,7 @@ class Incidente(Base):
 
     id_incidente = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     id_vehiculo = Column(UUID(as_uuid=True), ForeignKey("vehiculo.id_vehiculo"), nullable=False)
+    
     id_taller = Column(UUID(as_uuid=True), ForeignKey("taller.id_taller"), nullable=True)
     id_sucursal = Column(UUID(as_uuid=True), nullable=True)
     id_usuario_cliente = Column(UUID(as_uuid=True), ForeignKey("usuarios.id_usuario"), nullable=False)
