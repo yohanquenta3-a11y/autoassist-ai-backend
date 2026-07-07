@@ -32,6 +32,8 @@ import app.packages.finance.domain.models            # Pago
 import app.packages.scheduling.domain.models         # Cita
 # Quotations
 import app.packages.quotations.domain.models         # SolicitudCotizacion, Cotizacion
+# Transfers
+import app.packages.transfers.domain.models          # SolicitudTraslado, HistorialTraslado
 
 target_metadata = Base.metadata
 
