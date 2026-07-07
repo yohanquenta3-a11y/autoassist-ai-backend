@@ -1,5 +1,5 @@
-# Constancia de subida - Pedro
+# Recuperatorio - Pedro
 
-Este archivo es una constancia documental para la rama `Pedro`.
+Este archivo corresponde al recuperatorio trabajado en la rama `Pedro`.
 
 No modifica código fuente, configuración, migraciones, endpoints ni variables de entorno del backend.
